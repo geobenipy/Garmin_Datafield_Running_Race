@@ -1,0 +1,18 @@
+<?xml version="1.0"?>
+<properties>
+    <property id="backgroundMode" type="number">0</property>
+    <property id="targetPaceSecPerKm" type="number">300</property>
+    <property id="targetDistanceCode" type="number">2</property>
+    <property id="targetTime" type="number">12600</property>
+    <property id="paceToleranceSec" type="number">10</property>
+    <property id="nutritionStartDelaySec" type="number">900</property>
+    <property id="nutritionAlarm1" type="number">8000</property>
+    <property id="nutritionAlarm2" type="number">18000</property>
+    <property id="nutritionAlarm3" type="number">30000</property>
+    <property id="nutritionAlarm4" type="number">38000</property>
+    <property id="hrZone1" type="number">114</property>
+    <property id="hrZone2" type="number">133</property>
+    <property id="hrZone3" type="number">152</property>
+    <property id="hrZone4" type="number">171</property>
+    <property id="hrZone5" type="number">190</property>
+</properties>

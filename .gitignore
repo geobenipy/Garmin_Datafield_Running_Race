@@ -1,0 +1,10 @@
+bin/
+*.prg
+*.prg.debug.xml
+*.der
+*.pem
+*.pub
+*.jks
+*.keystore
+.DS_Store
+Thumbs.db
