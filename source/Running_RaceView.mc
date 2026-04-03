@@ -219,19 +219,19 @@ class Running_RaceView extends WatchUi.DataField {
         drawOuterRing(dc, centerX, centerY, radius);
         drawSensorIcons(dc, scale);
 
-        drawCenteredMetric(dc, centerX, scaled(60, scale), powerText, pickMetricFont(dc, powerText, scaled(112, scale)), colorForPower(currentPower, hasPower));
-        drawCenteredMetric(dc, scaled(128, scale), scaled(94, scale), cadenceText, pickMetricFont(dc, cadenceText, scaled(74, scale)), colorForCadence(currentCadence));
-        drawCenteredMetric(dc, scaled(288, scale), scaled(94, scale), reserveText, pickMetricFont(dc, reserveText, scaled(104, scale)), colorForReserve(reserveLogic.reservePercent));
-        drawCenteredMetric(dc, centerX, scaled(122, scale), lapPaceText, pickMetricFont(dc, lapPaceText, scaled(96, scale)), colorForPace(paceLogic.lapPaceSec));
-        drawCenteredMetric(dc, centerX, scaled(148, scale), deltaText, pickMetricFont(dc, deltaText, scaled(124, scale)), colorForDelta(paceLogic.deltaToTargetSec()));
+        drawCenteredMetric(dc, centerX, scaled(60, scale), powerText, pickEmphasisFont(dc, powerText, scaled(112, scale)), colorForPower(currentPower, hasPower));
+        drawCenteredMetric(dc, scaled(128, scale), scaled(94, scale), cadenceText, pickCompactFont(dc, cadenceText, scaled(74, scale)), colorForCadence(currentCadence));
+        drawCenteredMetric(dc, scaled(288, scale), scaled(94, scale), reserveText, pickCompactFont(dc, reserveText, scaled(104, scale)), colorForReserve(reserveLogic.reservePercent));
+        drawCenteredMetric(dc, centerX, scaled(122, scale), lapPaceText, pickCompactFont(dc, lapPaceText, scaled(96, scale)), colorForPace(paceLogic.lapPaceSec));
+        drawCenteredMetric(dc, centerX, scaled(148, scale), deltaText, pickEmphasisFont(dc, deltaText, scaled(124, scale)), colorForDelta(paceLogic.deltaToTargetSec()));
 
         drawRoundedPanel(dc, scaled(90, scale), scaled(188, scale), scaled(98, scale), scaled(40, scale), scaled(8, scale), COLOR_PANEL_DISTANCE);
         drawRoundedPanel(dc, scaled(326, scale), scaled(188, scale), scaled(98, scale), scaled(40, scale), scaled(8, scale), COLOR_PANEL_DISTANCE);
-        drawCenteredMetric(dc, scaled(90, scale), scaled(188, scale), distanceText, pickMetricFont(dc, distanceText, scaled(88, scale)), COLOR_WHITE);
-        drawCenteredMetric(dc, scaled(326, scale), scaled(188, scale), remainingText, pickMetricFont(dc, remainingText, scaled(88, scale)), COLOR_WHITE);
+        drawCenteredMetric(dc, scaled(90, scale), scaled(188, scale), distanceText, pickEmphasisFont(dc, distanceText, scaled(88, scale)), COLOR_WHITE);
+        drawCenteredMetric(dc, scaled(326, scale), scaled(188, scale), remainingText, pickEmphasisFont(dc, remainingText, scaled(88, scale)), COLOR_WHITE);
 
-        drawCenteredMetric(dc, scaled(64, scale), scaled(224, scale), averagePaceText, pickMetricFont(dc, averagePaceText, scaled(84, scale)), colorForPace(paceLogic.averagePaceSec));
-        drawCenteredMetric(dc, scaled(352, scale), scaled(224, scale), rollingPaceText, pickMetricFont(dc, rollingPaceText, scaled(84, scale)), colorForPace(paceLogic.rolling5MinPaceSec));
+        drawCenteredMetric(dc, scaled(64, scale), scaled(224, scale), averagePaceText, pickCompactFont(dc, averagePaceText, scaled(84, scale)), colorForPace(paceLogic.averagePaceSec));
+        drawCenteredMetric(dc, scaled(352, scale), scaled(224, scale), rollingPaceText, pickCompactFont(dc, rollingPaceText, scaled(84, scale)), colorForPace(paceLogic.rolling5MinPaceSec));
 
         drawRoundedPanel(dc, centerX, scaled(246, scale), scaled(136, scale), scaled(66, scale), scaled(12, scale), COLOR_PANEL_CENTER);
         drawFieldOne(dc, centerX, scaled(246, scale), scaled(136, scale), scaled(66, scale), scale);
@@ -241,12 +241,12 @@ class Running_RaceView extends WatchUi.DataField {
         drawCenteredMetric(dc, scaled(132, scale), scaled(304, scale), elapsedText, pickTimeFont(dc, elapsedText, scaled(112, scale)), COLOR_WHITE);
         drawCenteredMetric(dc, scaled(284, scale), scaled(304, scale), finishText, pickTimeFont(dc, finishText, scaled(112, scale)), colorForProjectedFinish());
 
-        drawRoundedPanel(dc, scaled(94, scale), scaled(360, scale), scaled(74, scale), scaled(32, scale), scaled(4, scale), COLOR_PANEL_BLACK);
-        drawRoundedPanel(dc, scaled(322, scale), scaled(360, scale), scaled(74, scale), scaled(32, scale), scaled(4, scale), COLOR_PANEL_BLACK);
-        drawCenteredMetric(dc, scaled(94, scale), scaled(360, scale), avgHrText, pickMetricFont(dc, avgHrText, scaled(60, scale)), colorForHrValue(hrLogic.averageHr));
-        drawCenteredMetric(dc, centerX, scaled(388, scale), currentHrText, pickMainHrFont(dc, currentHrText, scaled(118, scale)), colorForHrValue(hrLogic.currentHr.toFloat()));
-        drawCenteredMetric(dc, scaled(322, scale), scaled(360, scale), rollingHrText, pickMetricFont(dc, rollingHrText, scaled(60, scale)), colorForHrValue(hrLogic.rolling5MinHr));
-        drawCenteredMetric(dc, centerX, scaled(336, scale), ratioText, Graphics.FONT_MEDIUM, colorForVerticalRatio());
+        drawRoundedPanel(dc, scaled(86, scale), scaled(358, scale), scaled(68, scale), scaled(30, scale), scaled(4, scale), COLOR_PANEL_BLACK);
+        drawRoundedPanel(dc, scaled(330, scale), scaled(358, scale), scaled(68, scale), scaled(30, scale), scaled(4, scale), COLOR_PANEL_BLACK);
+        drawCenteredMetric(dc, scaled(86, scale), scaled(358, scale), avgHrText, pickCompactFont(dc, avgHrText, scaled(54, scale)), colorForHrValue(hrLogic.averageHr));
+        drawCenteredMetric(dc, centerX, scaled(390, scale), currentHrText, pickEmphasisFont(dc, currentHrText, scaled(96, scale)), colorForHrValue(hrLogic.currentHr.toFloat()));
+        drawCenteredMetric(dc, scaled(330, scale), scaled(358, scale), rollingHrText, pickCompactFont(dc, rollingHrText, scaled(54, scale)), colorForHrValue(hrLogic.rolling5MinHr));
+        drawCenteredMetric(dc, centerX, scaled(336, scale), ratioText, Graphics.FONT_SMALL, colorForVerticalRatio());
     }
 
     function drawFieldOne(dc as Dc, centerX as Number, centerY as Number, panelWidth as Number, panelHeight as Number, scale as Float) as Void {
@@ -399,16 +399,19 @@ class Running_RaceView extends WatchUi.DataField {
     }
 
     function pickCenterFont(dc as Dc, text as String, maxWidth as Number) {
-        if (textWidth(dc, text, Graphics.FONT_NUMBER_HOT) <= maxWidth) {
-            return Graphics.FONT_NUMBER_HOT;
-        }
         if (textWidth(dc, text, Graphics.FONT_NUMBER_MEDIUM) <= maxWidth) {
             return Graphics.FONT_NUMBER_MEDIUM;
         }
-        return Graphics.FONT_NUMBER_MILD;
+        if (textWidth(dc, text, Graphics.FONT_NUMBER_MILD) <= maxWidth) {
+            return Graphics.FONT_NUMBER_MILD;
+        }
+        if (textWidth(dc, text, Graphics.FONT_LARGE) <= maxWidth) {
+            return Graphics.FONT_LARGE;
+        }
+        return Graphics.FONT_MEDIUM;
     }
 
-    function pickMetricFont(dc as Dc, text as String, maxWidth as Number) {
+    function pickEmphasisFont(dc as Dc, text as String, maxWidth as Number) {
         if (textWidth(dc, text, Graphics.FONT_LARGE) <= maxWidth) {
             return Graphics.FONT_LARGE;
         }
@@ -418,13 +421,7 @@ class Running_RaceView extends WatchUi.DataField {
         return Graphics.FONT_SMALL;
     }
 
-    function pickMainHrFont(dc as Dc, text as String, maxWidth as Number) {
-        if (text.length() <= 2 && textWidth(dc, text, Graphics.FONT_NUMBER_MILD) <= maxWidth) {
-            return Graphics.FONT_NUMBER_MILD;
-        }
-        if (textWidth(dc, text, Graphics.FONT_LARGE) <= maxWidth) {
-            return Graphics.FONT_LARGE;
-        }
+    function pickCompactFont(dc as Dc, text as String, maxWidth as Number) {
         if (textWidth(dc, text, Graphics.FONT_MEDIUM) <= maxWidth) {
             return Graphics.FONT_MEDIUM;
         }
@@ -432,9 +429,6 @@ class Running_RaceView extends WatchUi.DataField {
     }
 
     function pickTimeFont(dc as Dc, text as String, maxWidth as Number) {
-        if (textWidth(dc, text, Graphics.FONT_LARGE) <= maxWidth) {
-            return Graphics.FONT_LARGE;
-        }
         if (textWidth(dc, text, Graphics.FONT_MEDIUM) <= maxWidth) {
             return Graphics.FONT_MEDIUM;
         }
