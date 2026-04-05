@@ -173,169 +173,189 @@ class Running_RaceView extends WatchUi.DataField {
         var cy     = h / 2;
         var radius = scaled(202, scale);
 
+        // ── background ──────────────────────────────────────────────────────
         dc.setColor(COLOR_BG, COLOR_BG);
         dc.clear();
         dc.fillCircle(cx, cy, radius);
 
+        // ── zone arcs (drawn first, everything else overlays them) ──────────
         var arcR = scaled(182, scale);
-        var arcT = scaled(7,   scale);
-        drawZoneArc(dc, cx, cy, arcR, arcT,
-                    215.0, 325.0, config.powerZones as Array<Number>, currentPower);
-        drawZoneArc(dc, cx, cy, arcR, arcT,
-                    145.0, 35.0,  config.hrZones    as Array<Number>, hrLogic.currentHr);
-
+        var arcT = scaled(9,   scale);
+        drawZoneArc(dc, cx, cy, arcR, arcT, 215.0, 325.0,
+                    config.powerZones as Array<Number>, currentPower);
+        drawZoneArc(dc, cx, cy, arcR, arcT, 145.0, 35.0,
+                    config.hrZones    as Array<Number>, hrLogic.currentHr);
         drawOuterRing(dc, cx, cy, radius);
-        drawChestIcon(dc, scaled(54,  scale), scaled(108, scale), scaled(4, scale));
-        drawGpsIcon  (dc, scaled(362, scale), scaled(108, scale), scaled(5, scale));
 
-        // Feld 10 – Power
+        // ── sensor icons ─────────────────────────────────────────────────────
+        drawChestIcon(dc, scaled(54,  scale), scaled(104, scale), scaled(4, scale));
+        drawGpsIcon  (dc, scaled(352, scale), scaled(104, scale), scaled(5, scale));
+
+        // ════════════════════════════════════════════════════════════════════
+        // ROW 1  –  Feld 10: Running Power (top center)
+        // y=56   FONT_LARGE
+        // ════════════════════════════════════════════════════════════════════
         var pwrText = formatPower(currentPower, hasPower);
-        drawCenteredMetric(dc, cx, scaled(60, scale),
+        drawCenteredMetric(dc, cx, scaled(56, scale),
             pwrText,
-            pickEmphasisFont(dc, pwrText, scaled(112, scale)),
+            pickEmphasisFont(dc, pwrText, scaled(108, scale)),
             colorForPower(currentPower, hasPower));
 
-        // Feld 11 – Cadence
-        var cadText = formatCadence(currentCadence);
-        drawCenteredMetric(dc, scaled(128, scale), scaled(94, scale),
-            cadText,
-            pickCompactFont(dc, cadText, scaled(74, scale)),
+        // ════════════════════════════════════════════════════════════════════
+        // ROW 2  –  Feld 11: Cadence (left)  ·  Feld 12: Reserve (right)
+        // y=86   FONT_SMALL
+        // ════════════════════════════════════════════════════════════════════
+        drawCenteredMetric(dc, scaled(128, scale), scaled(86, scale),
+            formatCadence(currentCadence), Graphics.FONT_SMALL,
             colorForCadence(currentCadence));
 
-        // Feld 12 – Reserve %
-        var resText = formatReserve(reserveLogic.reservePercent);
-        drawCenteredMetric(dc, scaled(288, scale), scaled(94, scale),
-            resText,
-            pickCompactFont(dc, resText, scaled(104, scale)),
+        drawCenteredMetric(dc, scaled(288, scale), scaled(86, scale),
+            formatReserve(reserveLogic.reservePercent), Graphics.FONT_SMALL,
             colorForReserve(reserveLogic.reservePercent));
 
-        // Feld 9 – Lap pace
-        // FONT_SMALL is intentional: keeps this label compact so Feld 8
-        // (delta) has room to breathe below it without overlapping.
-        var lapText = formatPace(paceLogic.lapPaceSec);
-        drawCenteredMetric(dc, cx, scaled(120, scale),
-            lapText,
-            Graphics.FONT_SMALL,
-            colorForPace(paceLogic.lapPaceSec));
+        // ════════════════════════════════════════════════════════════════════
+        // ROW 3  –  Feld 9: Strategy/target pace for this segment
+        // y=112   FONT_SMALL   Orange = "this is your target"
+        // ════════════════════════════════════════════════════════════════════
+        // Shows the configured target pace (e.g. "5:00") as a constant
+        // orange reference – the pace the runner should hold this km.
+        drawCenteredMetric(dc, cx, scaled(112, scale),
+            formatPace(config.targetPaceSec), Graphics.FONT_SMALL,
+            COLOR_ORANGE);
 
-        // Feld 8 – Delta to target
-        // pickCompactFont caps at FONT_MEDIUM (~30px) so it fits between
-        // Feld 9 above (y=120) and the distance panels below (y=188).
-        var deltaText = formatSignedPaceDelta(paceLogic.deltaToTargetSec());
-        drawCenteredMetric(dc, cx, scaled(152, scale),
-            deltaText,
-            pickCompactFont(dc, deltaText, scaled(124, scale)),
-            colorForDelta(paceLogic.deltaToTargetSec()));
-
+        // ════════════════════════════════════════════════════════════════════
+        // ROW 4  –  Feld 2: Distance (left panel)
+        //           Feld 8: Delta (CENTER, between the panels)
+        //           Feld 3: Remaining (right panel)
+        //
+        // KEY LAYOUT RULE: All three elements share the same y = 164.
+        // The distance panels are offset left/right to leave a clear center
+        // gap where the delta value sits.
+        //   Left panel:   cx=94,  x from 40 to 148
+        //   Center gap:   148 → 268  (120 px – wide enough for any delta text)
+        //   Right panel:  cx=322, x from 268 to 376
+        // ════════════════════════════════════════════════════════════════════
         // Feld 2 – Distance covered
-        drawRoundedPanel(dc, scaled(90,  scale), scaled(188, scale),
-                         scaled(98, scale), scaled(40, scale),
-                         scaled(8,  scale), COLOR_PANEL_DIST);
-        var distText = formatDistance(paceLogic.distanceKm);
-        drawCenteredMetric(dc, scaled(90, scale), scaled(188, scale),
-            distText,
-            pickEmphasisFont(dc, distText, scaled(88, scale)),
+        drawRoundedPanel(dc, scaled(94, scale), scaled(164, scale),
+                         scaled(108, scale), scaled(44, scale),
+                         scaled(9, scale), COLOR_PANEL_DIST);
+        drawCenteredMetric(dc, scaled(94, scale), scaled(164, scale),
+            formatDistance(paceLogic.distanceKm),
+            pickEmphasisFont(dc, formatDistance(paceLogic.distanceKm),
+                             scaled(96, scale)),
             COLOR_WHITE);
 
         // Feld 3 – Remaining distance
-        drawRoundedPanel(dc, scaled(326, scale), scaled(188, scale),
-                         scaled(98, scale), scaled(40, scale),
-                         scaled(8,  scale), COLOR_PANEL_DIST);
-        var remText = formatDistance(paceLogic.remainingKm);
-        drawCenteredMetric(dc, scaled(326, scale), scaled(188, scale),
-            remText,
-            pickEmphasisFont(dc, remText, scaled(88, scale)),
+        drawRoundedPanel(dc, scaled(322, scale), scaled(164, scale),
+                         scaled(108, scale), scaled(44, scale),
+                         scaled(9, scale), COLOR_PANEL_DIST);
+        drawCenteredMetric(dc, scaled(322, scale), scaled(164, scale),
+            formatDistance(paceLogic.remainingKm),
+            pickEmphasisFont(dc, formatDistance(paceLogic.remainingKm),
+                             scaled(96, scale)),
             COLOR_WHITE);
 
-        // Feld 6 – Average pace
-        // x=90 aligns with the left distance panel centre, sitting clearly
-        // to the left of the Feld 1 centre panel (which starts at x=140).
-        var avgPaceText = formatPace(paceLogic.averagePaceSec);
-        drawCenteredMetric(dc, scaled(90, scale), scaled(224, scale),
-            avgPaceText,
-            pickCompactFont(dc, avgPaceText, scaled(84, scale)),
+        // Feld 8 – Signed delta (center gap between panels)
+        var deltaText = formatSignedPaceDelta(paceLogic.deltaToTargetSec());
+        drawCenteredMetric(dc, cx, scaled(164, scale),
+            deltaText,
+            pickCompactFont(dc, deltaText, scaled(108, scale)),
+            colorForDelta(paceLogic.deltaToTargetSec()));
+
+        // ════════════════════════════════════════════════════════════════════
+        // ROW 5  –  Feld 6: Avg pace (left)
+        //           Feld 1: Current smoothed pace (center panel, DOMINANT)
+        //           Feld 7: Rolling pace (right)
+        //
+        // The center panel is drawn first.  Feld 6 and Feld 7 are at the
+        // same cy as the panel but outside its x-bounds (panel: x 134–282,
+        // flanks at x=76 and x=340), so no background conflict.
+        // ════════════════════════════════════════════════════════════════════
+        var p1W  = scaled(148, scale);
+        var p1H  = scaled(68,  scale);
+        var p1CY = scaled(230, scale);
+
+        // Draw center panel background first
+        drawRoundedPanel(dc, cx, p1CY, p1W, p1H, scaled(13, scale), COLOR_PANEL_CENTER);
+
+        // Feld 6 – Average pace (left flank)
+        drawCenteredMetric(dc, scaled(76, scale), p1CY,
+            formatPace(paceLogic.averagePaceSec), Graphics.FONT_SMALL,
             colorForPace(paceLogic.averagePaceSec));
 
-        // Feld 7 – 5-min rolling pace
-        // x=326 aligns with the right distance panel centre, sitting clearly
-        // to the right of the Feld 1 centre panel (which ends at x=276).
-        var rollPaceText = formatPace(paceLogic.rolling5MinPaceSec);
-        drawCenteredMetric(dc, scaled(326, scale), scaled(224, scale),
-            rollPaceText,
-            pickCompactFont(dc, rollPaceText, scaled(84, scale)),
+        // Feld 7 – 5-min rolling pace (right flank)
+        drawCenteredMetric(dc, scaled(340, scale), p1CY,
+            formatPace(paceLogic.rolling5MinPaceSec), Graphics.FONT_SMALL,
             colorForPace(paceLogic.rolling5MinPaceSec));
 
-        // Feld 1 – Current smoothed pace (centre panel)
-        drawRoundedPanel(dc, cx, scaled(246, scale),
-                         scaled(136, scale), scaled(66, scale),
-                         scaled(12,  scale), COLOR_PANEL_CENTER);
-        drawFieldOne(dc, cx, scaled(246, scale),
-                     scaled(136, scale), scaled(66, scale), scale);
+        // Feld 1 – Current pace (on top of panel)
+        drawFieldOne(dc, cx, p1CY, p1W, p1H, scale);
 
-        // Feld 4 – Elapsed time
-        drawRoundedPanel(dc, scaled(132, scale), scaled(304, scale),
-                         scaled(124, scale), scaled(46, scale),
-                         scaled(10,  scale), COLOR_PANEL_TIME);
-        var elapsedText = formatTimeHms(paceLogic.elapsedSec);
-        drawCenteredMetric(dc, scaled(132, scale), scaled(304, scale),
-            elapsedText,
-            pickTimeFont(dc, elapsedText, scaled(112, scale)),
+        // ════════════════════════════════════════════════════════════════════
+        // ROW 6  –  Feld 4: Elapsed (left panel)  ·  Feld 5: Finish (right)
+        // y=292   h=48
+        // ════════════════════════════════════════════════════════════════════
+        drawRoundedPanel(dc, scaled(128, scale), scaled(292, scale),
+                         scaled(124, scale), scaled(48, scale),
+                         scaled(10, scale), COLOR_PANEL_TIME);
+        drawCenteredMetric(dc, scaled(128, scale), scaled(292, scale),
+            formatTimeHms(paceLogic.elapsedSec),
+            pickTimeFont(dc, formatTimeHms(paceLogic.elapsedSec), scaled(112, scale)),
             COLOR_WHITE);
 
-        // Feld 5 – Projected finish time
-        drawRoundedPanel(dc, scaled(284, scale), scaled(304, scale),
-                         scaled(124, scale), scaled(46, scale),
-                         scaled(10,  scale), COLOR_PANEL_TIME);
-        var finishText = formatTimeHms(paceLogic.projectedFinishSec);
-        drawCenteredMetric(dc, scaled(284, scale), scaled(304, scale),
-            finishText,
-            pickTimeFont(dc, finishText, scaled(112, scale)),
+        drawRoundedPanel(dc, scaled(288, scale), scaled(292, scale),
+                         scaled(124, scale), scaled(48, scale),
+                         scaled(10, scale), COLOR_PANEL_TIME);
+        drawCenteredMetric(dc, scaled(288, scale), scaled(292, scale),
+            formatTimeHms(paceLogic.projectedFinishSec),
+            pickTimeFont(dc, formatTimeHms(paceLogic.projectedFinishSec),
+                         scaled(112, scale)),
             colorForProjectedFinish());
 
-        // Feld 16 – Vertical ratio
-        drawCenteredMetric(dc, cx, scaled(336, scale),
-            formatVerticalRatio(),
-            Graphics.FONT_SMALL,
-            colorForVerticalRatio());
-
-        // Feld 14 – Average HR
-        drawRoundedPanel(dc, scaled(86, scale), scaled(358, scale),
-                         scaled(68, scale), scaled(30, scale),
-                         scaled(4,  scale), COLOR_PANEL_BLACK);
-        var avgHrText = formatHeartRateNumber(hrLogic.averageHr);
-        drawCenteredMetric(dc, scaled(86, scale), scaled(358, scale),
-            avgHrText,
-            pickCompactFont(dc, avgHrText, scaled(54, scale)),
+        // ════════════════════════════════════════════════════════════════════
+        // ROW 7  –  Feld 14: Avg HR (left)
+        //           Feld 16: Vert ratio (center, tiny)
+        //           Feld 15: Rolling HR (right)
+        // y=336   all three on the same line
+        // ════════════════════════════════════════════════════════════════════
+        drawCenteredMetric(dc, scaled(96,  scale), scaled(336, scale),
+            formatHeartRateNumber(hrLogic.averageHr), Graphics.FONT_SMALL,
             colorForHrValue(hrLogic.averageHr));
 
-        // Feld 15 – 5-min rolling HR
-        drawRoundedPanel(dc, scaled(330, scale), scaled(358, scale),
-                         scaled(68, scale), scaled(30, scale),
-                         scaled(4,  scale), COLOR_PANEL_BLACK);
-        var rollHrText = formatHeartRateNumber(hrLogic.rolling5MinHr);
-        drawCenteredMetric(dc, scaled(330, scale), scaled(358, scale),
-            rollHrText,
-            pickCompactFont(dc, rollHrText, scaled(54, scale)),
+        drawCenteredMetric(dc, cx, scaled(336, scale),
+            formatVerticalRatio(), Graphics.FONT_XTINY,
+            colorForVerticalRatio());
+
+        drawCenteredMetric(dc, scaled(320, scale), scaled(336, scale),
+            formatHeartRateNumber(hrLogic.rolling5MinHr), Graphics.FONT_SMALL,
             colorForHrValue(hrLogic.rolling5MinHr));
 
-        // Feld 13 – Current HR (large, bottom centre)
-        var curHrText = formatHeartRateNumber(hrLogic.currentHr);
-        drawCenteredMetric(dc, cx, scaled(390, scale),
-            curHrText,
-            pickEmphasisFont(dc, curHrText, scaled(96, scale)),
+        // ════════════════════════════════════════════════════════════════════
+        // ROW 8  –  Feld 13: Current HR  (bottom center, large)
+        // y=386   second most important metric after pace
+        // ════════════════════════════════════════════════════════════════════
+        drawCenteredMetric(dc, cx, scaled(386, scale),
+            formatHeartRateNumber(hrLogic.currentHr),
+            pickEmphasisFont(dc, formatHeartRateNumber(hrLogic.currentHr),
+                             scaled(110, scale)),
             colorForHrValue(hrLogic.currentHr.toFloat()));
     }
 
     // -----------------------------------------------------------------------
-    // Feld 1 inner content
+    // Feld 1 – Current smoothed pace inside the center panel.
+    // Panel cy=230, h=68.  Without header: pace text perfectly centered.
+    // With banner/drift header: header at panel top, pace nudged down.
     // -----------------------------------------------------------------------
     function drawFieldOne(dc as Dc,
                           cx as Number, cy as Number,
                           panelW as Number, panelH as Number,
                           scale as Float) as Void {
+
+        var paceText = formatPace(paceLogic.smoothedPaceSec);
+        var paceFont = pickCenterFont(dc, paceText, panelW - scaled(16, scale));
+
         var headerText  = "";
         var headerColor = COLOR_WHITE;
-
         if (alertLogic.hasActiveBanner(paceLogic.elapsedSec)) {
             headerText  = alertLogic.bannerText;
             headerColor = alertLogic.bannerColor as Number;
@@ -345,16 +365,19 @@ class Running_RaceView extends WatchUi.DataField {
         }
 
         if (!headerText.equals("")) {
+            // Header at top of panel; shift pace center down slightly
             drawCenteredMetric(dc, cx,
-                cy - (panelH / 2) + scaled(12, scale),
+                cy - (panelH / 2) + scaled(10, scale),
                 headerText, Graphics.FONT_XTINY, headerColor);
+            drawCenteredMetric(dc, cx, cy + scaled(8, scale),
+                paceText, paceFont,
+                colorForPace(paceLogic.smoothedPaceSec));
+        } else {
+            // No header: perfectly centered in panel
+            drawCenteredMetric(dc, cx, cy,
+                paceText, paceFont,
+                colorForPace(paceLogic.smoothedPaceSec));
         }
-
-        var paceText = formatPace(paceLogic.smoothedPaceSec);
-        drawCenteredMetric(dc, cx, cy + scaled(6, scale),
-            paceText,
-            pickCenterFont(dc, paceText, panelW - scaled(18, scale)),
-            colorForPace(paceLogic.smoothedPaceSec));
     }
 
     // -----------------------------------------------------------------------
@@ -481,14 +504,24 @@ class Running_RaceView extends WatchUi.DataField {
     // -----------------------------------------------------------------------
     // Font pickers
     // -----------------------------------------------------------------------
+
+    // BUG FIX: FONT_NUMBER_MEDIUM / FONT_NUMBER_MILD only contain the
+    // characters 0-9, colon and decimal point.  The dash "-" is absent,
+    // so "--:--" renders as garbage (looks like "--+--" in the simulator).
+    // Guard: only use number fonts for actual numeric pace strings.
     function pickCenterFont(dc as Dc, text as String, maxW as Number) {
-        if (textWidth(dc, text, Graphics.FONT_NUMBER_MEDIUM) <= maxW) {
-            return Graphics.FONT_NUMBER_MEDIUM; }
-        if (textWidth(dc, text, Graphics.FONT_NUMBER_MILD)   <= maxW) {
-            return Graphics.FONT_NUMBER_MILD; }
-        if (textWidth(dc, text, Graphics.FONT_LARGE)         <= maxW) {
+        var isNumericPace = !text.equals("--:--");
+        if (isNumericPace) {
+            if (textWidth(dc, text, Graphics.FONT_NUMBER_MEDIUM) <= maxW) {
+                return Graphics.FONT_NUMBER_MEDIUM; }
+            if (textWidth(dc, text, Graphics.FONT_NUMBER_MILD)   <= maxW) {
+                return Graphics.FONT_NUMBER_MILD; }
+        }
+        if (textWidth(dc, text, Graphics.FONT_LARGE)  <= maxW) {
             return Graphics.FONT_LARGE; }
-        return Graphics.FONT_MEDIUM;
+        if (textWidth(dc, text, Graphics.FONT_MEDIUM) <= maxW) {
+            return Graphics.FONT_MEDIUM; }
+        return Graphics.FONT_SMALL;
     }
 
     function pickEmphasisFont(dc as Dc, text as String, maxW as Number) {
