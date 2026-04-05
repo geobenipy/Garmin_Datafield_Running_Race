@@ -1,53 +1,77 @@
 import Toybox.Lang;
 
+// ---------------------------------------------------------------------------
+// RacePaceLogic  –  all pace / distance / lap calculations
+// ---------------------------------------------------------------------------
+// BUG FIX: updateInstantPace() previously wrote smoothedPaceSec = instantPaceSec
+// on every compute() call (which fires multiple times per second), completely
+// overwriting the rolling-average that addPaceSample() had just built once per
+// second.  Now smoothedPaceSec is ONLY written inside addPaceSample().
+// ---------------------------------------------------------------------------
+
 class RacePaceLogic {
 
     var config;
-    var elapsedSec = 0;
-    var distanceKm = 0.0;
-    var remainingKm = 42.195;
-    var instantPaceSec = 0.0;
-    var smoothedPaceSec = 0.0;
-    var averagePaceSec = 0.0;
-    var rolling5MinPaceSec = 0.0;
-    var projectedFinishSec = 0;
-    var lapPaceSec = 0.0;
+
+    // --- live values updated every compute() ---
+    var elapsedSec      = 0;
+    var distanceKm      = 0.0;
+    var remainingKm     = 42.195;
+    var instantPaceSec  = 0.0;   // raw GPS pace – noisy, do NOT display directly
+    var smoothedPaceSec = 0.0;   // rolling-average over config.smoothWindowSec samples
+
+    // --- heavy-update values (every 10 s) ---
+    var averagePaceSec      = 0.0;
+    var rolling5MinPaceSec  = 0.0;
+    var projectedFinishSec  = 0;
+
+    // --- lap ---
+    var lapPaceSec          = 0.0;
     var lapAnchorDistanceKm = 0.0;
     var lapAnchorElapsedSec = 0.0;
-    var nextAutoLapKm = 1.0;
-    var prevDistanceKm = 0.0;
-    var prevElapsedSec = 0;
-    var lastSampleSecond = -1;
-    var lastHeavyUpdateSec = -100;
-    var lastLapResetSec = 0;
-    var lapVersion = 0;
+    var nextAutoLapKm       = 1.0;
+    var lastLapResetSec     = 0;
+    var lapVersion          = 0;
 
+    // --- internal ---
+    var prevDistanceKm     = 0.0;
+    var prevElapsedSec     = 0;
+    var lastSampleSecond   = -1;
+    var lastHeavyUpdateSec = -100;
+
+    // pace sample ring-buffer: 1 entry/second of activity, capped at sampleWindowSec
     var paceSamples = [] as Array<Numeric>;
 
     function initialize(configRef) {
         config = configRef;
     }
 
-    function update(elapsedSeconds as Number, distanceKilometers as Float, currentSpeed, averageSpeed) as Boolean {
-        var isNewSecond = elapsedSeconds != lastSampleSecond;
+    // -----------------------------------------------------------------------
+    // Called every compute() cycle. Returns true once per elapsed second.
+    // -----------------------------------------------------------------------
+    function update(elapsedSeconds as Number,
+                    distanceKilometers as Float,
+                    currentSpeed,
+                    averageSpeed) as Boolean {
+
+        var isNewSecond = (elapsedSeconds != lastSampleSecond);
 
         if (isNewSecond) {
             prevElapsedSec = elapsedSec;
             prevDistanceKm = distanceKm;
         }
 
-        elapsedSec = elapsedSeconds;
-        distanceKm = distanceKilometers;
+        elapsedSec  = elapsedSeconds;
+        distanceKm  = distanceKilometers;
         remainingKm = config.raceDistanceKm - distanceKm;
-        if (remainingKm < 0.0) {
-            remainingKm = 0.0;
-        }
+        if (remainingKm < 0.0) { remainingKm = 0.0; }
 
+        // Raw GPS pace every cycle – does NOT touch smoothedPaceSec
         updateInstantPace(currentSpeed);
-        updateAveragePace(averageSpeed);
 
         if (isNewSecond) {
-            addPaceSample();
+            updateAveragePace(averageSpeed);
+            addPaceSample();     // <-- only place that writes smoothedPaceSec
             updateAutoLap();
             updateLapPace();
             lastSampleSecond = elapsedSec;
@@ -56,15 +80,21 @@ class RacePaceLogic {
         return isNewSecond;
     }
 
+    // -----------------------------------------------------------------------
+    // Stores the instantaneous GPS pace.  Does NOT update smoothedPaceSec.
+    // -----------------------------------------------------------------------
     function updateInstantPace(currentSpeed) as Void {
         if (currentSpeed != null && currentSpeed > 0.25) {
-            instantPaceSec = 1000.0 / currentSpeed;
-            if (instantPaceSec > 0.0 && instantPaceSec < 1200.0) {
-                smoothedPaceSec = instantPaceSec;
+            var raw = 1000.0 / currentSpeed;
+            if (raw > 0.0 && raw < 1200.0) {
+                instantPaceSec = raw;
             }
         }
     }
 
+    // -----------------------------------------------------------------------
+    // Derive average pace from the device's averageSpeed field (most accurate).
+    // -----------------------------------------------------------------------
     function updateAveragePace(averageSpeed) as Void {
         if (averageSpeed != null && averageSpeed > 0.25) {
             averagePaceSec = 1000.0 / averageSpeed;
@@ -73,74 +103,43 @@ class RacePaceLogic {
         }
     }
 
+    // -----------------------------------------------------------------------
+    // Add one sample per second and compute the smoothed pace from the ring.
+    // This is the ONLY function that writes smoothedPaceSec.
+    // -----------------------------------------------------------------------
     function addPaceSample() as Void {
         if (instantPaceSec > 0.0 && instantPaceSec < 1200.0) {
             paceSamples.add(instantPaceSec);
             trimSamples(paceSamples, config.sampleWindowSec);
-            smoothedPaceSec = averageLast(paceSamples, config.smoothWindowSec);
+        }
+
+        var avg = averageLast(paceSamples, config.smoothWindowSec);
+        if (avg > 0.0) {
+            smoothedPaceSec = avg;
+        } else if (averagePaceSec > 0.0) {
+            // Fallback during the first few seconds before samples accumulate
+            smoothedPaceSec = averagePaceSec;
         }
     }
 
-    function trimSamples(samples as Array<Numeric>, maxCount as Number) as Void {
-        while (samples.size() > maxCount) {
-            samples.remove(0);
-        }
-    }
-
-    function averageLast(samples as Array<Numeric>, requestedCount as Number) as Float {
-        return averageRange(samples, requestedCount, 0);
-    }
-
-    function averageRange(samples as Array<Numeric>, requestedCount as Number, offsetFromEnd as Number) as Float {
-        var sampleCount = samples.size();
-        if (sampleCount <= 0 || requestedCount <= 0) {
-            return 0.0;
-        }
-
-        var endIndex = sampleCount - offsetFromEnd;
-        if (endIndex < 0) {
-            endIndex = 0;
-        }
-
-        var startIndex = endIndex - requestedCount;
-        if (startIndex < 0) {
-            startIndex = 0;
-        }
-
-        var sum = 0.0;
-        var count = 0;
-        for (var i = startIndex; i < endIndex; i += 1) {
-            sum += samples[i].toFloat();
-            count += 1;
-        }
-
-        if (count <= 0) {
-            return 0.0;
-        }
-
-        return sum / count.toFloat();
-    }
-
+    // -----------------------------------------------------------------------
+    // Heavy refresh – called every config.heavyUpdateSec (default 10 s)
+    // -----------------------------------------------------------------------
     function isHeavyRefreshDue() as Boolean {
-        return elapsedSec - lastHeavyUpdateSec >= config.heavyUpdateSec;
+        return (elapsedSec - lastHeavyUpdateSec) >= config.heavyUpdateSec;
     }
 
     function refreshHeavy() as Void {
         rolling5MinPaceSec = averageLast(paceSamples, config.rollingWindowSec);
 
-        var projectionPace = rolling5MinPaceSec;
-        if (projectionPace <= 0.0) {
-            projectionPace = smoothedPaceSec;
-        }
-        if (projectionPace <= 0.0) {
-            projectionPace = averagePaceSec;
-        }
-        if (projectionPace <= 0.0) {
-            projectionPace = config.targetPaceSec;
-        }
-
+        // Projected finish: 70 % rolling pace + 30 % overall average pace
+        var projectionPace = config.targetPaceSec;
         if (rolling5MinPaceSec > 0.0 && averagePaceSec > 0.0) {
             projectionPace = (rolling5MinPaceSec * 0.7) + (averagePaceSec * 0.3);
+        } else if (rolling5MinPaceSec > 0.0) {
+            projectionPace = rolling5MinPaceSec;
+        } else if (averagePaceSec > 0.0) {
+            projectionPace = averagePaceSec;
         }
 
         if (distanceKm <= 0.05) {
@@ -154,83 +153,115 @@ class RacePaceLogic {
         lastHeavyUpdateSec = elapsedSec;
     }
 
+    // -----------------------------------------------------------------------
+    // Auto-lap: trigger once every full kilometre
+    // -----------------------------------------------------------------------
     function updateAutoLap() as Void {
         while (distanceKm >= nextAutoLapKm) {
-            setLapAnchor(nextAutoLapKm, estimateElapsedAtDistance(nextAutoLapKm));
+            setLapAnchor(nextAutoLapKm,
+                         estimateElapsedAtDistance(nextAutoLapKm));
             nextAutoLapKm += 1.0;
         }
     }
 
+    // -----------------------------------------------------------------------
+    // Manual lap: snap to nearest km if within config.lapSnapMeters
+    // -----------------------------------------------------------------------
     function handleLapTrigger() as Void {
-        var snappedDistanceKm = distanceKm;
-        var snappedElapsedSec = elapsedSec.toFloat();
-        var nearestKm = roundNumber(distanceKm);
-        var distanceDeltaMeters = absoluteFloat(distanceKm - nearestKm.toFloat()) * 1000.0;
+        var snappedDist    = distanceKm;
+        var snappedElapsed = elapsedSec.toFloat();
+        var nearestKm      = roundNumber(distanceKm);
+        var deltaMeters    = absoluteFloat(distanceKm - nearestKm.toFloat()) * 1000.0;
 
-        if (nearestKm > lapAnchorDistanceKm && distanceDeltaMeters <= config.lapSnapMeters) {
-            snappedDistanceKm = nearestKm.toFloat();
-            snappedElapsedSec = estimateElapsedAtDistance(snappedDistanceKm);
+        if (nearestKm > lapAnchorDistanceKm &&
+            deltaMeters <= config.lapSnapMeters) {
+            snappedDist    = nearestKm.toFloat();
+            snappedElapsed = estimateElapsedAtDistance(snappedDist);
         }
 
-        setLapAnchor(snappedDistanceKm, snappedElapsedSec);
-        nextAutoLapKm = snappedDistanceKm.toNumber() + 1.0;
-        if (nextAutoLapKm <= snappedDistanceKm) {
-            nextAutoLapKm = snappedDistanceKm + 1.0;
+        setLapAnchor(snappedDist, snappedElapsed);
+        nextAutoLapKm = snappedDist.toNumber() + 1.0;
+        if (nextAutoLapKm <= snappedDist) {
+            nextAutoLapKm = snappedDist + 1.0;
         }
     }
 
-    function setLapAnchor(anchorDistanceKm as Float, anchorElapsed as Float) as Void {
-        lapAnchorDistanceKm = anchorDistanceKm;
+    function setLapAnchor(anchorDist as Float, anchorElapsed as Float) as Void {
+        lapAnchorDistanceKm = anchorDist;
         lapAnchorElapsedSec = anchorElapsed;
-        lastLapResetSec = anchorElapsed.toNumber();
+        lastLapResetSec     = anchorElapsed.toNumber();
         lapVersion += 1;
         updateLapPace();
     }
 
-    function estimateElapsedAtDistance(targetDistanceKm as Float) as Float {
-        var distanceSpanKm = distanceKm - prevDistanceKm;
-        if (distanceSpanKm > 0.0 && targetDistanceKm >= prevDistanceKm && targetDistanceKm <= distanceKm) {
-            var ratio = (targetDistanceKm - prevDistanceKm) / distanceSpanKm;
-            return prevElapsedSec.toFloat() + ((elapsedSec - prevElapsedSec).toFloat() * ratio);
+    // Linear interpolation: find elapsed time at a past distance crossing
+    function estimateElapsedAtDistance(targetKm as Float) as Float {
+        var span = distanceKm - prevDistanceKm;
+        if (span > 0.0 &&
+            targetKm >= prevDistanceKm &&
+            targetKm <= distanceKm) {
+            var ratio = (targetKm - prevDistanceKm) / span;
+            return prevElapsedSec.toFloat() +
+                   ((elapsedSec - prevElapsedSec).toFloat() * ratio);
         }
-
-        var referencePace = smoothedPaceSec;
-        if (referencePace <= 0.0) {
-            referencePace = averagePaceSec;
-        }
-        if (referencePace <= 0.0) {
-            return elapsedSec.toFloat();
-        }
-
-        return elapsedSec.toFloat() - ((distanceKm - targetDistanceKm) * referencePace);
+        var refPace = smoothedPaceSec > 0.0 ? smoothedPaceSec : averagePaceSec;
+        if (refPace <= 0.0) { return elapsedSec.toFloat(); }
+        return elapsedSec.toFloat() - ((distanceKm - targetKm) * refPace);
     }
 
     function updateLapPace() as Void {
-        var lapDistanceKm = distanceKm - lapAnchorDistanceKm;
-        var lapTimeSec = elapsedSec.toFloat() - lapAnchorElapsedSec;
-        if (lapDistanceKm > 0.01 && lapTimeSec > 0.0) {
-            lapPaceSec = lapTimeSec / lapDistanceKm;
+        var lapDist = distanceKm - lapAnchorDistanceKm;
+        var lapTime = elapsedSec.toFloat() - lapAnchorElapsedSec;
+        if (lapDist > 0.01 && lapTime > 0.0) {
+            lapPaceSec = lapTime / lapDist;
         }
     }
 
+    // Negative = faster than target (green), positive = slower (red)
     function deltaToTargetSec() as Float {
-        if (smoothedPaceSec <= 0.0) {
-            return 0.0;
-        }
+        if (smoothedPaceSec <= 0.0) { return 0.0; }
         return smoothedPaceSec - config.targetPaceSec;
     }
 
-    function roundNumber(value) as Number {
-        if (value < 0) {
-            return (value - 0.5).toNumber();
+    // -----------------------------------------------------------------------
+    // Shared helpers
+    // -----------------------------------------------------------------------
+    function trimSamples(samples as Array<Numeric>, maxCount as Number) as Void {
+        while (samples.size() > maxCount) { samples.remove(0); }
+    }
+
+    function averageLast(samples as Array<Numeric>,
+                         requestedCount as Number) as Float {
+        return averageRange(samples, requestedCount, 0);
+    }
+
+    // averageRange is also called by RaceHeartRateLogic for drift detection
+    function averageRange(samples as Array<Numeric>,
+                          requestedCount as Number,
+                          offsetFromEnd as Number) as Float {
+        var n = samples.size();
+        if (n <= 0 || requestedCount <= 0) { return 0.0; }
+
+        var endIdx   = n - offsetFromEnd;
+        if (endIdx < 0) { endIdx = 0; }
+        var startIdx = endIdx - requestedCount;
+        if (startIdx < 0) { startIdx = 0; }
+
+        var sum   = 0.0;
+        var count = 0;
+        for (var i = startIdx; i < endIdx; i += 1) {
+            sum   += samples[i].toFloat();
+            count += 1;
         }
+        return count > 0 ? sum / count.toFloat() : 0.0;
+    }
+
+    function roundNumber(value) as Number {
+        if (value < 0) { return (value - 0.5).toNumber(); }
         return (value + 0.5).toNumber();
     }
 
     function absoluteFloat(value as Float) as Float {
-        if (value < 0.0) {
-            return -value;
-        }
-        return value;
+        return value < 0.0 ? -value : value;
     }
 }
