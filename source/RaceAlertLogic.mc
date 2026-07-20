@@ -1,11 +1,13 @@
-import Toybox.Attention;
 import Toybox.Lang;
 
 // ---------------------------------------------------------------------------
 // RaceAlertLogic  –  nutrition alerts, 5 km feedback, banner system
 // ---------------------------------------------------------------------------
-// FIX: Explicit `as Boolean` / `as Number` casts on array element access to
-//      eliminate "Cannot determine if container access is using container type".
+// CRASH FIX: The Toybox.Attention module (vibrate / playTone) is NOT available
+//   to data fields.  Calling Attention.vibrate() from compute() is what froze
+//   the watch the moment the first time-based fuel alarm fired (~15 min in).
+//   A data field's only safe alert channel is the on-screen banner, so all
+//   Attention usage has been removed; showBanner() is the alert now.
 // ---------------------------------------------------------------------------
 
 class RaceAlertLogic {
@@ -42,7 +44,6 @@ class RaceAlertLogic {
                 showBanner("FUEL " + describeAlert(alertValue),
                            0xF2A640,
                            paceLogic.elapsedSec + config.bannerShortSec);
-                vibrate();
             }
         }
     }
@@ -125,16 +126,6 @@ class RaceAlertLogic {
 
     function clearExpiredBanner(currentSec as Number) as Void {
         if (currentSec > bannerUntilSec) { bannerText = ""; }
-    }
-
-    function vibrate() as Void {
-        try {
-            Attention.vibrate([
-                new Attention.VibeProfile(80,  160),
-                new Attention.VibeProfile(0,   80),
-                new Attention.VibeProfile(100, 240)
-            ] as Array<Attention.VibeProfile>);
-        } catch (e) {}
     }
 
     function absoluteFloat(value as Float) as Float {
