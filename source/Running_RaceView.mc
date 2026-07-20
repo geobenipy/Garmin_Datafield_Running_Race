@@ -32,9 +32,9 @@ class Running_RaceView extends WatchUi.DataField {
     const COLOR_GREEN        = 0x49C56D;
     const COLOR_RED          = 0xD24B3D;
     const COLOR_ORANGE       = 0xE59B3E;
-    const COLOR_PANEL_CENTER = 0x5E78C8;
-    const COLOR_PANEL_TIME   = 0x9AAAE4;
-    const COLOR_PANEL_DIST   = 0x4CA3D7;
+    const COLOR_PANEL_CENTER = 0x243244;   // hero pace tile – slightly elevated
+    const COLOR_PANEL_TIME    = 0x181D24;  // calm dark slate (times)
+    const COLOR_PANEL_DIST    = 0x181D24;  // calm dark slate (dist / remaining)
     const COLOR_PANEL_BLACK  = 0x111111;
     const COLOR_TRACK        = 0x333333;
 
@@ -206,10 +206,11 @@ class Running_RaceView extends WatchUi.DataField {
             formatCadence(currentCadence), Graphics.FONT_SMALL,
             colorForCadence(currentCadence));
 
-        // Feld 9: the pace the runner SHOULD run this km (strategy target)
+        // Feld 9: the pace the runner SHOULD run this km (strategy target).
+        // Muted: it is a fixed reference; the delta + hero pace carry the status.
         lbl(dc, cx, S(108, scale),
             formatPace(config.targetPaceSec), Graphics.FONT_SMALL,
-            COLOR_ORANGE);
+            COLOR_MUTED);
 
         lbl(dc, S(324, scale), S(108, scale),
             formatReserve(reserveLogic.reservePercent), Graphics.FONT_SMALL,
@@ -220,11 +221,11 @@ class Running_RaceView extends WatchUi.DataField {
         // Delta text sits in the 128-px centre gap.
         var distTxt = formatDistance(paceLogic.distanceKm);
         var remTxt  = formatDistance(paceLogic.remainingKm);
-        drawPanel(dc, S(92,  scale), S(152, scale), S(104, scale), S(38, scale), S(9, scale), COLOR_PANEL_DIST);
+        drawPanel(dc, S(92,  scale), S(152, scale), S(104, scale), S(38, scale), S(10, scale), COLOR_PANEL_DIST);
         lbl(dc, S(92,  scale), S(152, scale), distTxt,
             pickCompactFont(dc, distTxt, S(92, scale)), COLOR_WHITE);
 
-        drawPanel(dc, S(324, scale), S(152, scale), S(104, scale), S(38, scale), S(9, scale), COLOR_PANEL_DIST);
+        drawPanel(dc, S(324, scale), S(152, scale), S(104, scale), S(38, scale), S(10, scale), COLOR_PANEL_DIST);
         lbl(dc, S(324, scale), S(152, scale), remTxt,
             pickCompactFont(dc, remTxt, S(92, scale)), COLOR_WHITE);
 
@@ -239,17 +240,18 @@ class Running_RaceView extends WatchUi.DataField {
         var p1cy = S(208, scale);
         var p1w  = S(130, scale);
         var p1h  = S(58,  scale);
-        drawPanel(dc, cx, p1cy, p1w, p1h, S(12, scale), COLOR_PANEL_CENTER);
+        drawPanel(dc, cx, p1cy, p1w, p1h, S(10, scale), COLOR_PANEL_CENTER);
 
-        // Feld 6 average pace  –  left of centre panel (grid column x=92)
+        // Feld 6 average pace  –  left of centre panel (grid column x=92).
+        // Neutral: only the hero current pace carries the green/red deviation.
         lbl(dc, S(92,  scale), p1cy,
             formatPace(paceLogic.averagePaceSec), Graphics.FONT_SMALL,
-            colorForPace(paceLogic.averagePaceSec));
+            colorForMeasuredPace(paceLogic.averagePaceSec));
 
         // Feld 7 5-min rolling pace  –  right of centre panel (grid column x=324)
         lbl(dc, S(324, scale), p1cy,
             formatPace(paceLogic.rolling5MinPaceSec), Graphics.FONT_SMALL,
-            colorForPace(paceLogic.rolling5MinPaceSec));
+            colorForMeasuredPace(paceLogic.rolling5MinPaceSec));
 
         // Feld 1 current smoothed pace on the centre panel
         drawPacePanel(dc, cx, p1cy, p1w, p1h, scale);
@@ -482,14 +484,22 @@ class Running_RaceView extends WatchUi.DataField {
     // =========================================================================
     // Colour selectors
     // =========================================================================
+    // Hero current pace: green when within tolerance of target, red otherwise.
     function colorForPace(paceSeconds as Float) as Number {
         if (paceSeconds <= 0.0) { return COLOR_WHITE; }
         return absoluteFloat(paceSeconds - config.targetPaceSec)
                <= config.paceToleranceSec ? COLOR_GREEN : COLOR_RED;
     }
 
+    // Neutral colour for a measured pace readout (avg / rolling): white when we
+    // have a value, muted when we don't.  Deviation colour is reserved for the
+    // hero current-pace and the delta so the eye has a single status axis.
+    function colorForMeasuredPace(paceSeconds as Float) as Number {
+        return (paceSeconds > 0.0 && paceSeconds <= 1200.0) ? COLOR_WHITE : COLOR_MUTED;
+    }
+
     function colorForDelta(deltaSeconds as Float) as Number {
-        if (absoluteFloat(deltaSeconds) <= 1.5) { return COLOR_BLUE;  }
+        if (absoluteFloat(deltaSeconds) <= 1.5) { return COLOR_WHITE; }
         return deltaSeconds < 0.0 ? COLOR_GREEN : COLOR_RED;
     }
 
@@ -498,41 +508,27 @@ class Running_RaceView extends WatchUi.DataField {
         return paceLogic.projectedFinishSec <= config.targetTimeSec ? COLOR_GREEN : COLOR_RED;
     }
 
+    // Power / cadence / HR numbers stay neutral (white / muted); their zone is
+    // shown by the coloured arcs, so the numbers themselves need no colour.
     function colorForPower(value as Number, available as Boolean) as Number {
-        if (!available || value <= 0) { return COLOR_MUTED; }
-        return colorForZoneIndex(zoneIndexForValue(value, config.powerZones as Array<Number>));
+        return (!available || value <= 0) ? COLOR_MUTED : COLOR_WHITE;
     }
 
     function colorForCadence(value as Number) as Number {
-        var cz = config.cadenceZones as Array<Number>;
-        if (value <= 0)                 { return COLOR_MUTED;  }
-        if (value < (cz[0] as Number))  { return COLOR_ORANGE; }
-        if (value < (cz[1] as Number))  { return COLOR_BLUE;   }
-        if (value <= (cz[2] as Number)) { return COLOR_GREEN;  }
-        if (value <= (cz[3] as Number)) { return COLOR_BLUE;   }
-        return COLOR_RED;
+        return value <= 0 ? COLOR_MUTED : COLOR_WHITE;
     }
 
+    // Reserve is neutral until it runs low, then a single red warning.
     function colorForReserve(value as Number) as Number {
-        if (value >= 85) { return COLOR_BLUE;   }
-        if (value >= 65) { return COLOR_GREEN;  }
-        if (value >= 40) { return COLOR_ORANGE; }
-        return COLOR_RED;
+        return value < 40 ? COLOR_RED : COLOR_WHITE;
     }
 
     function colorForHrValue(value as Float) as Number {
-        if (value <= 0.0) { return COLOR_WHITE; }
-        return colorForZoneIndex(zoneIndexForValue(value.toNumber(),
-                                                   config.hrZones as Array<Number>));
+        return value <= 0.0 ? COLOR_MUTED : COLOR_WHITE;
     }
 
     function colorForVerticalRatio() as Number {
-        if (!hasVerticalRatio) { return COLOR_MUTED; }
-        var vz = config.verticalRatioZones as Array<Float>;
-        if (verticalRatio <= (vz[0] as Float)) { return COLOR_GREEN;  }
-        if (verticalRatio <= (vz[1] as Float)) { return COLOR_BLUE;   }
-        if (verticalRatio <= (vz[2] as Float)) { return COLOR_ORANGE; }
-        return COLOR_RED;
+        return hasVerticalRatio ? COLOR_WHITE : COLOR_MUTED;
     }
 
     function zoneIndexForValue(value as Number, thresholds as Array<Number>) as Number {
