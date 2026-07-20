@@ -13,7 +13,7 @@ import Toybox.WatchUi;
 //  y= 50  Feld 10  Power                cx=208  FONT_LARGE  zone colour
 //  y=108  Feld 11  Cadence  x=92   |  Feld 9  TargetPace cx=208 ORANGE  |  Feld 12  Reserve  x=324
 //  y=140  Feld  2  [panel cx=94 w=108]  |  Feld  8  Delta cx=208  |  Feld  3  [panel cx=322 w=108]
-//  y=208  [CENTER PANEL w=150 h=68]  Feld 6 x=72  Feld 1  Feld 7 x=344
+//  y=208  [CENTER PANEL w=150 h=68]  Feld 6 x=92  Feld 1  Feld 7 x=324
 //  y=272  Feld  4  [panel cx=134 w=126 h=48]  |  Feld  5  [panel cx=282 w=126 h=48]
 //  y=318  Feld 14  AvgHR x=92  |  Feld 16  VR cx=208 FONT_TINY  |  Feld 15  RollHR x=324
 //  y=362  Feld 13  Current HR  cx=208  FONT_LARGE
@@ -167,13 +167,20 @@ class Running_RaceView extends WatchUi.DataField {
         drawOuterRing(dc, cx, cy, S(202, scale));
 
         // ── sensor icons ──────────────────────────────────────────────────
-        drawChestIcon(dc, S(60,  scale), S(104, scale), S(4, scale));
-        drawGpsIcon  (dc, S(356, scale), S(104, scale), S(5, scale));
+        // Lifted up to flank the Power number (R1).  They used to sit at
+        // y=104 on the same line as cadence/reserve (R2) and collided with a
+        // real 3-digit cadence (~170 spm).  Up here the whole R2 data row is
+        // free, so cadence/reserve can share the 92/324 grid columns.
+        drawChestIcon(dc, S(116, scale), S(72, scale), S(4, scale));
+        drawGpsIcon  (dc, S(288, scale), S(72, scale), S(5, scale));
 
         // =====================================================================
-        // Layout is a 7-row vertical rhythm on the 416-px design canvas.  Row
-        // y-centres and panel heights are chosen so every row clears its
-        // neighbours (see gap notes) and stays inside the ring:
+        // Layout is a 7-row vertical rhythm on the 416-px design canvas with a
+        // fixed 3-column grid (left x=92 | centre x=208 | right x=324).  Rows
+        // 2/3/4/6 all hang their side values on the 92/324 columns so the whole
+        // field reads as clean vertical lines; the wide centre panels (hero
+        // pace, elapsed/finish times) key off the 208 centre.  Row y-centres and
+        // panel heights clear their neighbours and stay inside the ring:
         //   R1  y= 64  Feld 10  Power
         //   R2  y=108  Feld 11 | Feld  9 | Feld 12   (cadence | target | reserve)
         //   R3  y=152  Feld  2 | Feld  8 | Feld  3   (dist | delta | remaining)
@@ -227,19 +234,20 @@ class Running_RaceView extends WatchUi.DataField {
             colorForDelta(paceLogic.deltaToTargetSec()));
 
         // ── R4  Feld 6 | Feld 1 | Feld 7 ─────────────────────────────────
-        // Hero panel first; side paces sit well clear of it (panel 133..283).
+        // Hero panel is 130 wide (143..273) so the side paces on the 92/324
+        // grid keep ~16 px of air on each side instead of touching it.
         var p1cy = S(208, scale);
-        var p1w  = S(150, scale);
+        var p1w  = S(130, scale);
         var p1h  = S(58,  scale);
         drawPanel(dc, cx, p1cy, p1w, p1h, S(12, scale), COLOR_PANEL_CENTER);
 
-        // Feld 6 average pace  –  left of centre panel
-        lbl(dc, S(64,  scale), p1cy,
+        // Feld 6 average pace  –  left of centre panel (grid column x=92)
+        lbl(dc, S(92,  scale), p1cy,
             formatPace(paceLogic.averagePaceSec), Graphics.FONT_SMALL,
             colorForPace(paceLogic.averagePaceSec));
 
-        // Feld 7 5-min rolling pace  –  right of centre panel
-        lbl(dc, S(352, scale), p1cy,
+        // Feld 7 5-min rolling pace  –  right of centre panel (grid column x=324)
+        lbl(dc, S(324, scale), p1cy,
             formatPace(paceLogic.rolling5MinPaceSec), Graphics.FONT_SMALL,
             colorForPace(paceLogic.rolling5MinPaceSec));
 
@@ -247,20 +255,21 @@ class Running_RaceView extends WatchUi.DataField {
         drawPacePanel(dc, cx, p1cy, p1w, p1h, scale);
 
         // ── R5  Feld 4 | Feld 5 ──────────────────────────────────────────
-        // Panels w=128 (elapsed cx=116 → 52..180, finish cx=300 → 236..364);
-        // a 56-px gap keeps the two time readouts from ever merging.
+        // Panels w=140 (elapsed cx=116 → 46..186, finish cx=300 → 230..370),
+        // wide enough that a 7-char "H:MM:SS" readout keeps padding inside the
+        // rounded corners; a 44-px gap keeps the two times from ever merging.
         var elapsed = formatTimeHms(paceLogic.elapsedSec);
         var finish  = formatTimeHms(paceLogic.projectedFinishSec);
-        drawPanel(dc, S(116, scale), S(270, scale), S(128, scale), S(42, scale), S(10, scale), COLOR_PANEL_TIME);
+        drawPanel(dc, S(116, scale), S(270, scale), S(140, scale), S(42, scale), S(10, scale), COLOR_PANEL_TIME);
         lbl(dc, S(116, scale), S(270, scale), elapsed,
-            pickTimeFont(dc, elapsed, S(116, scale)), COLOR_WHITE);
+            pickTimeFont(dc, elapsed, S(120, scale)), COLOR_WHITE);
 
-        drawPanel(dc, S(300, scale), S(270, scale), S(128, scale), S(42, scale), S(10, scale), COLOR_PANEL_TIME);
+        drawPanel(dc, S(300, scale), S(270, scale), S(140, scale), S(42, scale), S(10, scale), COLOR_PANEL_TIME);
         lbl(dc, S(300, scale), S(270, scale), finish,
-            pickTimeFont(dc, finish, S(116, scale)), colorForProjectedFinish());
+            pickTimeFont(dc, finish, S(120, scale)), colorForProjectedFinish());
 
         // ── R6  Feld 14 | Feld 16 | Feld 15 ──────────────────────────────
-        lbl(dc, S(90,  scale), S(312, scale),
+        lbl(dc, S(92,  scale), S(312, scale),
             formatHeartRateNumber(hrLogic.averageHr), Graphics.FONT_SMALL,
             colorForHrValue(hrLogic.averageHr));
 
@@ -268,7 +277,7 @@ class Running_RaceView extends WatchUi.DataField {
             formatVerticalRatio(), Graphics.FONT_TINY,
             colorForVerticalRatio());
 
-        lbl(dc, S(326, scale), S(312, scale),
+        lbl(dc, S(324, scale), S(312, scale),
             formatHeartRateNumber(hrLogic.rolling5MinHr), Graphics.FONT_SMALL,
             colorForHrValue(hrLogic.rolling5MinHr));
 
