@@ -20,7 +20,11 @@ step. Run it from this folder in a PowerShell terminal:
 .\run.ps1                 # build + launch on fenix843mm (default)
 .\run.ps1 -BuildOnly      # compile only, no simulator
 .\run.ps1 -Device fr965   # target a different device
+.\run.ps1 -Shot           # build + launch + save bin\sim_shot.png (screenshot)
 ```
+
+`-Shot` captures the simulator window to `bin\sim_shot.png` (gitignored) so the
+rendered layout can be reviewed without taking a manual screenshot.
 
 It auto-detects the SDK (even if it is not on your PATH), signs with
 `developer_key_pkcs8.der`, builds with `-w` (warnings-as-errors), and reuses an
