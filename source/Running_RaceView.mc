@@ -170,7 +170,7 @@ class Running_RaceView extends WatchUi.DataField {
     }
 
     // =========================================================================
-    // onUpdate  – draw all 16 Felder
+    // onUpdate  – draw the 10 fields (lean layout)
     // =========================================================================
     function onUpdate(dc as Dc) as Void {
         var w      = dc.getWidth();
@@ -199,125 +199,81 @@ class Running_RaceView extends WatchUi.DataField {
         drawOuterRing(dc, cx, cy, S(202, scale));
 
         // ── sensor icons ──────────────────────────────────────────────────
-        // Lifted up to flank the Power number (R1).  They used to sit at
-        // y=104 on the same line as cadence/reserve (R2) and collided with a
-        // real 3-digit cadence (~170 spm).  Up here the whole R2 data row is
-        // free, so cadence/reserve can share the 92/324 grid columns.
+        // Flank the Power number (R1); the whole upper data row is otherwise
+        // free, so they never collide with a value.
         drawChestIcon(dc, S(116, scale), S(72, scale), S(4, scale));
         drawGpsIcon  (dc, S(288, scale), S(72, scale), S(5, scale));
 
         // =====================================================================
-        // Layout is a 7-row vertical rhythm on the 416-px design canvas with a
-        // fixed 3-column grid (left x=92 | centre x=208 | right x=324).  Rows
-        // 2/3/4/6 all hang their side values on the 92/324 columns so the whole
-        // field reads as clean vertical lines; the wide centre panels (hero
-        // pace, elapsed/finish times) key off the 208 centre.  Row y-centres and
-        // panel heights clear their neighbours and stay inside the ring:
-        //   R1  y= 64  Feld 10  Power
-        //   R2  y=108  Feld 11 | Feld  9 | Feld 12   (cadence | target | reserve)
-        //   R3  y=152  Feld  2 | Feld  8 | Feld  3   (dist | delta | remaining)
-        //   R4  y=208  Feld  6 | Feld  1 | Feld  7   (avg | CURRENT PACE | rolling)
-        //   R5  y=270  Feld  4 | Feld  5             (elapsed | finish)
-        //   R6  y=312  Feld 14 | Feld 16 | Feld 15   (avgHR | VR | rollHR)
-        //   R7  y=356  Feld 13  Current HR
+        // Lean 10-field layout (down from 16).  A vertical spine of the three
+        // anchors — Power (top), current PACE (centre hero), current HR
+        // (bottom) — with flanking pairs; the smaller field count buys bigger
+        // type and more air.  Row y-centres / panel heights clear neighbours:
+        //   R1  y= 64  Power (centre, big)                         [power arc]
+        //   R2  y=116  Distanz "done/total" (panel) | Reserve %
+        //   R3  y=200  Ø-Pace | CURRENT PACE (hero) | Delta
+        //   R4  y=270  Elapsed (panel) | Finish (panel)
+        //   R5  y=318  5-min HR trend (centre)
+        //   R6  y=356  Current HR (centre, big)                    [HR arc]
         // =====================================================================
 
-        // ── R1  Feld 10  Running Power ───────────────────────────────────
+        // ── R1  Power ────────────────────────────────────────────────────
         var pwrTxt = formatPower(currentPower, hasPower);
         lbl(dc, cx, S(64, scale), pwrTxt,
             pickEmphasisFont(dc, pwrTxt, S(150, scale)),
             colorForPower(currentPower, hasPower));
 
-        // ── R2  Feld 11 | Feld 9 | Feld 12 ───────────────────────────────
-        // Cadence and Reserve sit on the SAME column centres the rest of the
-        // layout uses (dist/rem panels at 92/324, HR row at 90/326).  The old
-        // x=134/282 put them only 74 px from the centred target pace, so the
-        // three values collided into one string ("1005:0090%").  At 92/324 the
-        // outer values clear the centred target by ~48 px on each side.
-        lbl(dc, S(92, scale), S(108, scale),
-            formatCadence(currentCadence), Graphics.FONT_SMALL,
-            colorForCadence(currentCadence));
+        // ── R2  Distanz (done/total) | Reserve % ─────────────────────────
+        // One panel replaces the old separate distance + remaining fields:
+        // "13.2/42" reads "13.2 of 42 km" at a glance.
+        var distTxt = formatDistance(paceLogic.distanceKm) + "/" +
+                      config.raceDistanceKm.toNumber().format("%d");
+        drawPanel(dc, S(116, scale), S(130, scale), S(132, scale), S(40, scale), S(10, scale), COLOR_PANEL_DIST);
+        lbl(dc, S(116, scale), S(130, scale), distTxt,
+            pickCompactFont(dc, distTxt, S(118, scale)), COLOR_WHITE);
 
-        // Feld 9: the pace the runner SHOULD run this km (strategy target).
-        // Muted: it is a fixed reference; the delta + hero pace carry the status.
-        lbl(dc, cx, S(108, scale),
-            formatPace(config.targetPaceSec), Graphics.FONT_SMALL,
-            COLOR_MUTED);
-
-        lbl(dc, S(324, scale), S(108, scale),
+        lbl(dc, S(300, scale), S(130, scale),
             formatReserve(reserveLogic.reservePercent), Graphics.FONT_SMALL,
             colorForReserve(reserveLogic.reservePercent));
 
-        // ── R3  Feld 2 | Feld 8 | Feld 3 ─────────────────────────────────
-        // Panels w=104 (dist cx=92 → 40..144, rem cx=324 → 272..376).
-        // Delta text sits in the 128-px centre gap.
-        var distTxt = formatDistance(paceLogic.distanceKm);
-        var remTxt  = formatDistance(paceLogic.remainingKm);
-        drawPanel(dc, S(92,  scale), S(152, scale), S(104, scale), S(38, scale), S(10, scale), COLOR_PANEL_DIST);
-        lbl(dc, S(92,  scale), S(152, scale), distTxt,
-            pickCompactFont(dc, distTxt, S(92, scale)), COLOR_WHITE);
-
-        drawPanel(dc, S(324, scale), S(152, scale), S(104, scale), S(38, scale), S(10, scale), COLOR_PANEL_DIST);
-        lbl(dc, S(324, scale), S(152, scale), remTxt,
-            pickCompactFont(dc, remTxt, S(92, scale)), COLOR_WHITE);
-
-        var deltaTxt = formatSignedPaceDelta(paceLogic.deltaToTargetSec());
-        lbl(dc, cx, S(152, scale), deltaTxt,
-            Graphics.FONT_MEDIUM,
-            colorForDelta(paceLogic.deltaToTargetSec()));
-
-        // ── R4  Feld 6 | Feld 1 | Feld 7 ─────────────────────────────────
-        // Hero panel is 130 wide (143..273) so the side paces on the 92/324
-        // grid keep ~16 px of air on each side instead of touching it.
-        var p1cy = S(208, scale);
-        var p1w  = S(130, scale);
-        var p1h  = S(58,  scale);
+        // ── R3  Ø-Pace | CURRENT PACE (hero) | Delta ─────────────────────
+        // Pace module: whole-race average (left) · current pace (hero) ·
+        // instant delta to target (right).
+        var p1cy = S(204, scale);
+        var p1w  = S(140, scale);
+        var p1h  = S(64,  scale);
         drawPanel(dc, cx, p1cy, p1w, p1h, S(10, scale), COLOR_PANEL_CENTER);
 
-        // Feld 6 average pace  –  left of centre panel (grid column x=92).
-        // Neutral: only the hero current pace carries the green/red deviation.
-        lbl(dc, S(92,  scale), p1cy,
+        lbl(dc, S(90, scale), p1cy,
             formatPace(paceLogic.averagePaceSec), Graphics.FONT_SMALL,
             colorForMeasuredPace(paceLogic.averagePaceSec));
 
-        // Feld 7 5-min rolling pace  –  right of centre panel (grid column x=324)
-        lbl(dc, S(324, scale), p1cy,
-            formatPace(paceLogic.rolling5MinPaceSec), Graphics.FONT_SMALL,
-            colorForMeasuredPace(paceLogic.rolling5MinPaceSec));
+        lbl(dc, S(326, scale), p1cy,
+            formatSignedPaceDelta(paceLogic.deltaToTargetSec()), Graphics.FONT_MEDIUM,
+            colorForDelta(paceLogic.deltaToTargetSec()));
 
-        // Feld 1 current smoothed pace on the centre panel
         drawPacePanel(dc, cx, p1cy, p1w, p1h, scale);
 
-        // ── R5  Feld 4 | Feld 5 ──────────────────────────────────────────
-        // Panels w=140 (elapsed cx=116 → 46..186, finish cx=300 → 230..370),
-        // wide enough that a 7-char "H:MM:SS" readout keeps padding inside the
-        // rounded corners; a 44-px gap keeps the two times from ever merging.
+        // ── R4  Elapsed | Finish ─────────────────────────────────────────
         var elapsed = formatTimeHms(paceLogic.elapsedSec);
         var finish  = formatTimeHms(paceLogic.projectedFinishSec);
-        drawPanel(dc, S(116, scale), S(270, scale), S(140, scale), S(42, scale), S(10, scale), COLOR_PANEL_TIME);
-        lbl(dc, S(116, scale), S(270, scale), elapsed,
+        drawPanel(dc, S(116, scale), S(276, scale), S(140, scale), S(42, scale), S(10, scale), COLOR_PANEL_TIME);
+        lbl(dc, S(116, scale), S(276, scale), elapsed,
             pickTimeFont(dc, elapsed, S(120, scale)), COLOR_WHITE);
 
-        drawPanel(dc, S(300, scale), S(270, scale), S(140, scale), S(42, scale), S(10, scale), COLOR_PANEL_TIME);
-        lbl(dc, S(300, scale), S(270, scale), finish,
+        drawPanel(dc, S(300, scale), S(276, scale), S(140, scale), S(42, scale), S(10, scale), COLOR_PANEL_TIME);
+        lbl(dc, S(300, scale), S(276, scale), finish,
             pickTimeFont(dc, finish, S(120, scale)), colorForProjectedFinish());
 
-        // ── R6  Feld 14 | Feld 16 | Feld 15 ──────────────────────────────
-        lbl(dc, S(92,  scale), S(312, scale),
-            formatHeartRateNumber(hrLogic.averageHr), Graphics.FONT_SMALL,
-            colorForHrValue(hrLogic.averageHr));
-
-        lbl(dc, cx, S(312, scale),
-            formatVerticalRatio(), Graphics.FONT_TINY,
-            colorForVerticalRatio());
-
-        lbl(dc, S(324, scale), S(312, scale),
+        // ── R5  HR: 5-min trend (left) | Current HR (centre, big) ────────
+        // Mirrors the pace module: the trend sits left of the big anchor
+        // instead of stacked on top of it (which overlapped).
+        lbl(dc, S(90, scale), S(348, scale),
             formatHeartRateNumber(hrLogic.rolling5MinHr), Graphics.FONT_SMALL,
             colorForHrValue(hrLogic.rolling5MinHr));
 
-        // ── R7  Feld 13  Current HR  (lifted to y=356 to clear the HR arc) ──
         var hrTxt = formatHeartRateNumber(hrLogic.currentHr);
-        lbl(dc, cx, S(356, scale), hrTxt,
+        lbl(dc, cx, S(348, scale), hrTxt,
             pickEmphasisFont(dc, hrTxt, S(140, scale)),
             colorForHrValue(hrLogic.currentHr.toFloat()));
         } catch (ex) {
