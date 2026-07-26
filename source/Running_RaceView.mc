@@ -9,14 +9,16 @@ import Toybox.WatchUi;
 // =============================================================================
 // Running_RaceView  –  Garmin Fenix 8 43mm  (416 × 416 px design canvas)
 // =============================================================================
-// Layout (design-px, scaled at runtime):
-//  y= 50  Feld 10  Power                cx=208  FONT_LARGE  zone colour
-//  y=108  Feld 11  Cadence  x=92   |  Feld 9  TargetPace cx=208 MUTED  |  Feld 12  Reserve  x=324
-//  y=140  Feld  2  [panel cx=94 w=108]  |  Feld  8  Delta cx=208  |  Feld  3  [panel cx=322 w=108]
-//  y=208  [CENTER PANEL w=150 h=68]  Feld 6 x=92  Feld 1  Feld 7 x=324
-//  y=272  Feld  4  [panel cx=134 w=126 h=48]  |  Feld  5  [panel cx=282 w=126 h=48]
-//  y=318  Feld 14  AvgHR x=92  |  Feld 16  VR cx=208 FONT_TINY  |  Feld 15  RollHR x=324
-//  y=362  Feld 13  Current HR  cx=208  FONT_LARGE
+// Lean 10-value round-face layout (design-px, scaled at runtime).  Every value
+// sits inside the ~r168 circle the two zone arcs (r182) leave free, so nothing
+// ever touches a colour bar.
+//   R1  y= 66  TOP effort (centre, big)  ·  phone + HR-strap glyphs  [top arc]
+//   R2  y=132  Distanz done/total (left)        |  Reserve %  (right)
+//   R3  y=200  Ø-Pace | CURRENT PACE (hero tile) | Delta-to-target
+//   R4  y=262  Elapsed (left)                    |  Projected finish (right)
+//   R5  y=310  5-min HR (small)  over  y=352 current HR (big)      [bottom arc]
+// The TOP number and the TOP zone arc both track whichever effort metric the
+// hardware provides: running power when a meter is present, else cadence.
 // =============================================================================
 
 class Running_RaceView extends WatchUi.DataField {
@@ -49,6 +51,8 @@ class Running_RaceView extends WatchUi.DataField {
 
     var currentPower     = 0;
     var hasPower         = false;
+    var currentCadence   = 0;
+    var hasCadence       = false;
     var hasVerticalRatio = false;   // implies a chest strap / RD pod is present
     var chestStatus      = 0;
     var phoneConnected   = false;
@@ -113,7 +117,8 @@ class Running_RaceView extends WatchUi.DataField {
 
         reserveLogic.reservePercent = 78;
 
-        currentPower     = 248;  hasPower = true;
+        currentPower     = 248;  hasPower   = true;
+        currentCadence   = 178;  hasCadence = true;
         hasVerticalRatio = true;
         chestStatus      = 2;
         phoneConnected   = true;
@@ -122,6 +127,8 @@ class Running_RaceView extends WatchUi.DataField {
     function updatePerformanceMetrics(info as Activity.Info) as Void {
         hasPower = false;
         if (info.currentPower != null && info.currentPower > 0) { currentPower = info.currentPower as Number; hasPower = true; }
+        hasCadence = false;
+        if (info.currentCadence != null && info.currentCadence > 0) { currentCadence = info.currentCadence as Number; hasCadence = true; }
         hasVerticalRatio = false;
         if (info has :verticalRatio) {
             var vr = info.verticalRatio;
@@ -181,11 +188,31 @@ class Running_RaceView extends WatchUi.DataField {
         try {
         dc.fillCircle(cx, cy, S(202, scale));
 
+        // Top effort metric adapts to the hardware: running power when a meter
+        // is present, else cadence (form).  The top number and the top zone arc
+        // both track it, so the best available effort signal owns the crown.
+        var topText;
+        var topColor;
+        var topZones = config.powerZones as Array<Number>;
+        var topValue = 0;
+        if (hasPower) {
+            topValue = currentPower;
+            topText  = formatPower(currentPower, true);
+            topColor = colorForPower(currentPower, true);
+        } else if (hasCadence) {
+            topValue = currentCadence;
+            topZones = config.cadenceZones as Array<Number>;
+            topText  = formatCadence(currentCadence, true);
+            topColor = colorForCadence(currentCadence, true);
+        } else {
+            topText  = "--";
+            topColor = COLOR_MUTED;
+        }
+
         // ── zone arcs ─────────────────────────────────────────────────────
         var arcR = S(182, scale);
         var arcT = S(9,   scale);
-        drawZoneArc(dc, cx, cy, arcR, arcT, 215.0, 325.0,
-                    config.powerZones as Array<Number>, currentPower);
+        drawZoneArc(dc, cx, cy, arcR, arcT, 215.0, 325.0, topZones, topValue);
         drawZoneArc(dc, cx, cy, arcR, arcT, 145.0, 35.0,
                     config.hrZones    as Array<Number>, hrLogic.currentHr);
         drawOuterRing(dc, cx, cy, S(202, scale));
@@ -208,11 +235,9 @@ class Running_RaceView extends WatchUi.DataField {
         //   R5  y=310/352  5-min HR (small) over Current HR (big)  [HR arc]
         // =====================================================================
 
-        // ── R1  Power + connection status (phone | HR strap) ─────────────
-        var pwrTxt = formatPower(currentPower, hasPower);
-        lbl(dc, cx, S(66, scale), pwrTxt,
-            pickEmphasisFont(dc, pwrTxt, S(150, scale)),
-            colorForPower(currentPower, hasPower));
+        // ── R1  Top effort (power/cadence) + connection status ───────────
+        lbl(dc, cx, S(66, scale), topText,
+            pickEmphasisFont(dc, topText, S(150, scale)), topColor);
 
         drawPhoneIcon(dc, S(138, scale), S(64, scale), scale, phoneConnected);
         drawHeartIcon(dc, S(278, scale), S(64, scale), scale, chestStatus >= 1);
@@ -488,6 +513,14 @@ class Running_RaceView extends WatchUi.DataField {
             zoneIndexForValue(value, config.powerZones as Array<Number>));
     }
 
+    // Cadence (used for the top slot when no power meter is present) is tinted
+    // by its own zone thresholds, same scale as power/HR.
+    function colorForCadence(value as Number, available as Boolean) as Number {
+        if (!available || value <= 0) { return COLOR_MUTED; }
+        return colorForZoneIndex(
+            zoneIndexForValue(value, config.cadenceZones as Array<Number>));
+    }
+
     // Reserve is neutral until it runs low, then a single red warning.
     function colorForReserve(value as Number) as Number {
         return value < 40 ? COLOR_RED : COLOR_WHITE;
@@ -546,6 +579,9 @@ class Running_RaceView extends WatchUi.DataField {
     }
 
     function formatPower(value as Number, available as Boolean) as String {
+        return (!available || value <= 0) ? "--" : value.format("%d");
+    }
+    function formatCadence(value as Number, available as Boolean) as String {
         return (!available || value <= 0) ? "--" : value.format("%d");
     }
     function formatReserve(value as Number) as String   { return value.format("%d") + "%"; }
