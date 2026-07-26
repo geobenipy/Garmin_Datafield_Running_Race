@@ -198,57 +198,52 @@ class Running_RaceView extends WatchUi.DataField {
                     config.hrZones    as Array<Number>, hrLogic.currentHr);
         drawOuterRing(dc, cx, cy, S(202, scale));
 
-        // ── sensor icons ──────────────────────────────────────────────────
-        // Flank the Power number (R1); the whole upper data row is otherwise
-        // free, so they never collide with a value.
-        drawChestIcon(dc, S(116, scale), S(72, scale), S(4, scale));
-        drawGpsIcon  (dc, S(288, scale), S(72, scale), S(5, scale));
+        // No custom sensor icons: only Garmin built-in primitives are used for
+        // graphics (drawArc for the colour bars, fillRoundedRectangle for the
+        // hero tile, drawText for values).
 
         // =====================================================================
-        // Lean 10-field layout (down from 16).  A vertical spine of the three
-        // anchors — Power (top), current PACE (centre hero), current HR
-        // (bottom) — with flanking pairs; the smaller field count buys bigger
-        // type and more air.  Row y-centres / panel heights clear neighbours:
-        //   R1  y= 64  Power (centre, big)                         [power arc]
-        //   R2  y=116  Distanz "done/total" (panel) | Reserve %
-        //   R3  y=200  Ø-Pace | CURRENT PACE (hero) | Delta
-        //   R4  y=270  Elapsed (panel) | Finish (panel)
-        //   R5  y=318  5-min HR trend (centre)
-        //   R6  y=356  Current HR (centre, big)                    [HR arc]
+        // Lean 10-field layout on the round face.  Every value lives inside the
+        // ~r168 circle the two zone arcs (r182) leave free, so nothing ever
+        // touches a colour bar.  Vertical spine of three anchors — Power (top),
+        // current PACE (centre hero tile), current HR (bottom) — with the
+        // secondary values as big plain text pushed toward the sides to fill
+        // the face and cut the black space:
+        //   R1  y= 66  Power (centre, big)                         [power arc]
+        //   R2  y=132  Distanz "done/total" | Reserve %
+        //   R3  y=200  Ø-Pace | CURRENT PACE (hero tile) | Delta
+        //   R4  y=262  Elapsed | Finish
+        //   R5  y=310/352  5-min HR (small) over Current HR (big)  [HR arc]
         // =====================================================================
 
         // ── R1  Power ────────────────────────────────────────────────────
         var pwrTxt = formatPower(currentPower, hasPower);
-        lbl(dc, cx, S(64, scale), pwrTxt,
+        lbl(dc, cx, S(66, scale), pwrTxt,
             pickEmphasisFont(dc, pwrTxt, S(150, scale)),
             colorForPower(currentPower, hasPower));
 
         // ── R2  Distanz (done/total) | Reserve % ─────────────────────────
-        // One panel replaces the old separate distance + remaining fields:
-        // "13.2/42" reads "13.2 of 42 km" at a glance.
         var distTxt = formatDistance(paceLogic.distanceKm) + "/" +
                       config.raceDistanceKm.toNumber().format("%d");
-        drawPanel(dc, S(116, scale), S(130, scale), S(132, scale), S(40, scale), S(10, scale), COLOR_PANEL_DIST);
-        lbl(dc, S(116, scale), S(130, scale), distTxt,
-            pickCompactFont(dc, distTxt, S(118, scale)), COLOR_WHITE);
-
-        lbl(dc, S(300, scale), S(130, scale),
-            formatReserve(reserveLogic.reservePercent), Graphics.FONT_SMALL,
+        lbl(dc, S(122, scale), S(132, scale), distTxt,
+            Graphics.FONT_MEDIUM, COLOR_WHITE);
+        lbl(dc, S(294, scale), S(132, scale),
+            formatReserve(reserveLogic.reservePercent), Graphics.FONT_MEDIUM,
             colorForReserve(reserveLogic.reservePercent));
 
-        // ── R3  Ø-Pace | CURRENT PACE (hero) | Delta ─────────────────────
+        // ── R3  Ø-Pace | CURRENT PACE (hero tile) | Delta ────────────────
         // Pace module: whole-race average (left) · current pace (hero) ·
         // instant delta to target (right).
-        var p1cy = S(204, scale);
-        var p1w  = S(140, scale);
-        var p1h  = S(64,  scale);
-        drawPanel(dc, cx, p1cy, p1w, p1h, S(10, scale), COLOR_PANEL_CENTER);
+        var p1cy = S(200, scale);
+        var p1w  = S(146, scale);
+        var p1h  = S(66,  scale);
+        drawPanel(dc, cx, p1cy, p1w, p1h, S(12, scale), COLOR_PANEL_CENTER);
 
-        lbl(dc, S(90, scale), p1cy,
-            formatPace(paceLogic.averagePaceSec), Graphics.FONT_SMALL,
+        lbl(dc, S(84, scale), p1cy,
+            formatPace(paceLogic.averagePaceSec), Graphics.FONT_MEDIUM,
             colorForMeasuredPace(paceLogic.averagePaceSec));
 
-        lbl(dc, S(326, scale), p1cy,
+        lbl(dc, S(332, scale), p1cy,
             formatSignedPaceDelta(paceLogic.deltaToTargetSec()), Graphics.FONT_MEDIUM,
             colorForDelta(paceLogic.deltaToTargetSec()));
 
@@ -257,23 +252,20 @@ class Running_RaceView extends WatchUi.DataField {
         // ── R4  Elapsed | Finish ─────────────────────────────────────────
         var elapsed = formatTimeHms(paceLogic.elapsedSec);
         var finish  = formatTimeHms(paceLogic.projectedFinishSec);
-        drawPanel(dc, S(116, scale), S(276, scale), S(140, scale), S(42, scale), S(10, scale), COLOR_PANEL_TIME);
-        lbl(dc, S(116, scale), S(276, scale), elapsed,
-            pickTimeFont(dc, elapsed, S(120, scale)), COLOR_WHITE);
+        lbl(dc, S(112, scale), S(262, scale), elapsed,
+            Graphics.FONT_MEDIUM, COLOR_WHITE);
+        lbl(dc, S(304, scale), S(262, scale), finish,
+            Graphics.FONT_MEDIUM, colorForProjectedFinish());
 
-        drawPanel(dc, S(300, scale), S(276, scale), S(140, scale), S(42, scale), S(10, scale), COLOR_PANEL_TIME);
-        lbl(dc, S(300, scale), S(276, scale), finish,
-            pickTimeFont(dc, finish, S(120, scale)), colorForProjectedFinish());
-
-        // ── R5  HR: 5-min trend (left) | Current HR (centre, big) ────────
-        // Mirrors the pace module: the trend sits left of the big anchor
-        // instead of stacked on top of it (which overlapped).
-        lbl(dc, S(90, scale), S(348, scale),
+        // ── R5  HR module: 5-min trend (small) over current HR (big) ─────
+        // Both centred so they stay in the safe column and collide with
+        // neither each other nor the HR arc.
+        lbl(dc, cx, S(310, scale),
             formatHeartRateNumber(hrLogic.rolling5MinHr), Graphics.FONT_SMALL,
             colorForHrValue(hrLogic.rolling5MinHr));
 
         var hrTxt = formatHeartRateNumber(hrLogic.currentHr);
-        lbl(dc, cx, S(348, scale), hrTxt,
+        lbl(dc, cx, S(352, scale), hrTxt,
             pickEmphasisFont(dc, hrTxt, S(140, scale)),
             colorForHrValue(hrLogic.currentHr.toFloat()));
         } catch (ex) {
