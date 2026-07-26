@@ -17,6 +17,11 @@ class RacePaceLogic {
     var elapsedSec      = 0;
     var distanceKm      = 0.0;
     var remainingKm     = 42.195;
+    // Real remaining distance along a loaded course (km), 0 = no course active.
+    // Set by the view from Activity.Info.distanceToDestination each compute().
+    // PacePro's target pace is NOT exposed by Connect IQ, but the loaded route
+    // is — so when navigating we take the true remaining distance from it.
+    var courseRemainingKm = 0.0;
     var instantPaceSec  = 0.0;   // raw GPS pace – noisy, do NOT display directly
     var smoothedPaceSec = 0.0;   // rolling-average over config.smoothWindowSec samples
 
@@ -61,8 +66,12 @@ class RacePaceLogic {
 
         elapsedSec  = elapsedSeconds;
         distanceKm  = distanceKilometers;
-        remainingKm = config.raceDistanceKm - distanceKm;
-        if (remainingKm < 0.0) { remainingKm = 0.0; }
+        if (courseRemainingKm > 0.0) {
+            remainingKm = courseRemainingKm;          // true remaining on a route
+        } else {
+            remainingKm = config.raceDistanceKm - distanceKm;
+            if (remainingKm < 0.0) { remainingKm = 0.0; }
+        }
 
         // Raw GPS pace every cycle – does NOT touch smoothedPaceSec
         updateInstantPace(currentSpeed);

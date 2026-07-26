@@ -78,6 +78,17 @@ class Running_RaceView extends WatchUi.DataField {
             if (info.elapsedTime     != null) { elapsedSec = (info.elapsedTime / 1000).toNumber(); }
             if (info.elapsedDistance != null) { distKm     = info.elapsedDistance / 1000.0; }
 
+            // Course awareness: PacePro's target pace is not exposed by CIQ, but
+            // a loaded route is.  When navigating, feed the true remaining
+            // distance so "remaining" and the finish projection track the real
+            // course; 0 keeps the configured race distance as the fallback.
+            var courseRemainingKm = 0.0;
+            if (info has :distanceToDestination) {
+                var dtd = info.distanceToDestination;
+                if (dtd != null && dtd > 0.0) { courseRemainingKm = dtd / 1000.0; }
+            }
+            paceLogic.courseRemainingKm = courseRemainingKm;
+
             var isNewSecond = paceLogic.update(elapsedSec, distKm,
                                                info.currentSpeed, info.averageSpeed);
             hrLogic.update(info, isNewSecond);
