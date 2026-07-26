@@ -111,7 +111,6 @@ class Running_RaceView extends WatchUi.DataField {
         paceLogic.projectedFinishSec = 12500;      // 3:28:20 (under 3:30 target)
 
         hrLogic.currentHr     = 155;
-        hrLogic.averageHr     = 150.0;
         hrLogic.rolling5MinHr = 150.0;      // +5 vs current → rising trend arrow
         hrLogic.driftActive   = false;
 

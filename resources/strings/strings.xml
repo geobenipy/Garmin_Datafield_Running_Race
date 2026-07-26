@@ -1,7 +1,6 @@
 <?xml version="1.0"?>
 <strings>
     <string id="AppName">Running Race Pro</string>
-    <string id="settingBgTitle">Theme</string>
     <string id="settingTargetPaceTitle">Ziel-Pace (min/km)</string>
     <string id="settingTargetDistTitle">Renndistanz</string>
     <string id="settingTargetTimeTitle">Zielzeit</string>

@@ -1,16 +1,6 @@
 <?xml version="1.0"?>
 <settings>
 
-    <setting propertyKey="@Properties.backgroundMode" title="@Strings.settingBgTitle">
-        <settingConfig type="list">
-            <listEntry value="0">Pitch Black</listEntry>
-            <listEntry value="1">Graphite</listEntry>
-            <listEntry value="2">Ocean</listEntry>
-            <listEntry value="3">Sand</listEntry>
-            <listEntry value="4">Forest</listEntry>
-        </settingConfig>
-    </setting>
-
     <setting propertyKey="@Properties.targetPaceSecPerKm" title="@Strings.settingTargetPaceTitle">
         <settingConfig type="list">
             <listEntry value="240">4:00 min/km</listEntry>

@@ -21,7 +21,6 @@ class Running_RaceApp extends Application.AppBase {
 
     // Write defaults only if a property has never been set (first install).
     function initializeDefaultProperties() as Void {
-        setDefault("backgroundMode",         0);
         setDefault("targetPaceSecPerKm",     300);
         setDefault("targetDistanceCode",     2);    // 0=10 km, 1=HM, 2=Marathon
         setDefault("targetTime",             12600);

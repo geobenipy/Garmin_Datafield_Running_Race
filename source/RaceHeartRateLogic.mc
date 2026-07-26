@@ -13,7 +13,6 @@ class RaceHeartRateLogic {
     var config;
 
     var currentHr     = 0;
-    var averageHr     = 0.0;
     var rolling5MinHr = 0.0;
 
     var driftActive   = false;
@@ -21,9 +20,6 @@ class RaceHeartRateLogic {
     var driftResetSec = 0;
 
     var hrSamples      = [] as Array<Number>;
-    var totalHr        = 0.0;
-    var totalHrSamples = 0;
-    var deviceAverageHr = 0;
 
     var lastHeavyUpdateSec = -100;
 
@@ -39,20 +35,9 @@ class RaceHeartRateLogic {
             currentHr = info.currentHeartRate as Number;
         }
 
-        if (info.averageHeartRate != null && info.averageHeartRate > 0) {
-            deviceAverageHr = info.averageHeartRate as Number;
-            averageHr       = deviceAverageHr.toFloat();
-        }
-
         if (isNewSecond && currentHr > 0) {
             hrSamples.add(currentHr);
             trimSamples(hrSamples, config.sampleWindowSec);
-            totalHr        += currentHr.toFloat();
-            totalHrSamples += 1;
-        }
-
-        if (deviceAverageHr <= 0 && totalHrSamples > 0) {
-            averageHr = totalHr / totalHrSamples.toFloat();
         }
     }
 
@@ -65,10 +50,6 @@ class RaceHeartRateLogic {
             rolling5MinHr = historyHr;
         } else {
             rolling5MinHr = averageRange(hrSamples, config.rollingWindowSec, 0);
-        }
-
-        if (deviceAverageHr <= 0 && totalHrSamples > 0) {
-            averageHr = totalHr / totalHrSamples.toFloat();
         }
 
         evaluateDrift(paceLogic);

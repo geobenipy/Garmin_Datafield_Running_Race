@@ -1,6 +1,5 @@
 <?xml version="1.0"?>
 <properties>
-    <property id="backgroundMode" type="number">0</property>
     <property id="targetPaceSecPerKm" type="number">300</property>
     <property id="targetDistanceCode" type="number">2</property>
     <property id="targetTime" type="number">12600</property>
