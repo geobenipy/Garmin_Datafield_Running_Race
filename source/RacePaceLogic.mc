@@ -26,12 +26,10 @@ class RacePaceLogic {
     var projectedFinishSec  = 0;
 
     // --- lap ---
-    var lapPaceSec          = 0.0;
     var lapAnchorDistanceKm = 0.0;
     var lapAnchorElapsedSec = 0.0;
     var nextAutoLapKm       = 1.0;
     var lastLapResetSec     = 0;
-    var lapVersion          = 0;
 
     // --- internal ---
     var prevDistanceKm     = 0.0;
@@ -73,7 +71,6 @@ class RacePaceLogic {
             updateAveragePace(averageSpeed);
             addPaceSample();     // <-- only place that writes smoothedPaceSec
             updateAutoLap();
-            updateLapPace();
             lastSampleSecond = elapsedSec;
         }
 
@@ -190,8 +187,6 @@ class RacePaceLogic {
         lapAnchorDistanceKm = anchorDist;
         lapAnchorElapsedSec = anchorElapsed;
         lastLapResetSec     = anchorElapsed.toNumber();
-        lapVersion += 1;
-        updateLapPace();
     }
 
     // Linear interpolation: find elapsed time at a past distance crossing
@@ -207,14 +202,6 @@ class RacePaceLogic {
         var refPace = smoothedPaceSec > 0.0 ? smoothedPaceSec : averagePaceSec;
         if (refPace <= 0.0) { return elapsedSec.toFloat(); }
         return elapsedSec.toFloat() - ((distanceKm - targetKm) * refPace);
-    }
-
-    function updateLapPace() as Void {
-        var lapDist = distanceKm - lapAnchorDistanceKm;
-        var lapTime = elapsedSec.toFloat() - lapAnchorElapsedSec;
-        if (lapDist > 0.01 && lapTime > 0.0) {
-            lapPaceSec = lapTime / lapDist;
-        }
     }
 
     // Negative = faster than target (green), positive = slower (red)

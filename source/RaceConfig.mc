@@ -43,7 +43,6 @@ class RaceConfig {
     var hrZones            = [114, 133, 152, 171, 190] as Array<Number>;
     var powerZones         = [220, 250, 280, 310, 340] as Array<Number>;
     var cadenceZones       = [160, 168, 180, 188]      as Array<Number>;
-    var verticalRatioZones = [7.5, 8.5, 9.5]           as Array<Float>;
 
     function initialize() {
         load();

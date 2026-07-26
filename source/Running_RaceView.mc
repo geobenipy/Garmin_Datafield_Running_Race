@@ -112,7 +112,7 @@ class Running_RaceView extends WatchUi.DataField {
 
         hrLogic.currentHr     = 155;
         hrLogic.averageHr     = 150.0;
-        hrLogic.rolling5MinHr = 153.0;
+        hrLogic.rolling5MinHr = 150.0;      // +5 vs current → rising trend arrow
         hrLogic.driftActive   = false;
 
         reserveLogic.reservePercent = 78;
@@ -277,12 +277,12 @@ class Running_RaceView extends WatchUi.DataField {
         lbl(dc, S(304, scale), S(262, scale), finish,
             Graphics.FONT_MEDIUM, colorForProjectedFinish());
 
-        // ── R5  HR module: 5-min trend (small) over current HR (big) ─────
-        // Both centred so they stay in the safe column and collide with
-        // neither each other nor the HR arc.
-        lbl(dc, cx, S(310, scale),
-            formatHeartRateNumber(hrLogic.rolling5MinHr), Graphics.FONT_SMALL,
-            colorForHrValue(hrLogic.rolling5MinHr));
+        // ── R5  HR module: current HR (big) + drift trend arrow above ────
+        // The small line reads currentHr against its 5-min average: a native
+        // triangle (no font glyph) + the bpm delta.  Rising = you are drifting
+        // up / possibly over-pacing (orange, red once real HR-vs-pace
+        // decoupling is detected), flat = calm, falling = recovering.
+        drawHrTrend(dc, cx, S(312, scale), scale);
 
         var hrTxt = formatHeartRateNumber(hrLogic.currentHr);
         lbl(dc, cx, S(352, scale), hrTxt,
@@ -360,6 +360,60 @@ class Running_RaceView extends WatchUi.DataField {
             [cx + S(9, scale), cy - lobeDy],
             [cx, cy + S(10, scale)]
         ]);
+    }
+
+    // HR drift trend: current HR relative to its own 5-min average, drawn as a
+    // native triangle (up / down) or a dash (flat) plus the bpm delta — no font
+    // glyph, so it can never render as garbage.  Colour escalates from calm
+    // (flat) to orange (rising) to red once RaceHeartRateLogic detects real
+    // HR-vs-pace decoupling, i.e. genuine over-pacing.
+    function drawHrTrend(dc as Dc, cx as Number, cy as Number,
+                         scale as Float) as Void {
+        var cur  = hrLogic.currentHr;
+        var base = hrLogic.rolling5MinHr;
+        if (cur <= 0 || base <= 0.0) { return; }   // not enough data yet
+
+        var d   = roundNumber(cur.toFloat() - base);
+        var dir = 0;                               // -1 falling, 0 flat, +1 rising
+        if (d >=  3) { dir =  1; }
+        if (d <= -3) { dir = -1; }
+
+        var color = COLOR_MUTED;                   // flat = calm
+        if (dir > 0) { color = hrLogic.driftActive ? COLOR_RED : COLOR_ORANGE; }
+        if (dir < 0) { color = COLOR_GREEN; }
+
+        var hw  = S(6, scale);                     // triangle half-width
+        var hh  = S(9, scale);                     // triangle height
+        var gap = S(6, scale);
+
+        dc.setColor(color, Graphics.COLOR_TRANSPARENT);
+        if (dir == 0) {
+            // Flat: a short centred dash, no number.
+            dc.fillRectangle(cx - hw, cy - S(1, scale), 2 * hw, S(3, scale));
+            return;
+        }
+
+        var numTxt = (d < 0 ? -d : d).format("%d");
+        var numW   = textWidth(dc, numTxt, Graphics.FONT_SMALL);
+        var total  = (2 * hw) + gap + numW;
+        var left   = cx - (total / 2);
+        var gx     = left + hw;                    // triangle centre x
+
+        if (dir > 0) {
+            dc.fillPolygon([
+                [gx,      cy - (hh / 2)],
+                [gx - hw, cy + (hh / 2)],
+                [gx + hw, cy + (hh / 2)]
+            ]);
+        } else {
+            dc.fillPolygon([
+                [gx,      cy + (hh / 2)],
+                [gx - hw, cy - (hh / 2)],
+                [gx + hw, cy - (hh / 2)]
+            ]);
+        }
+        dc.drawText(left + (2 * hw) + gap, cy, Graphics.FONT_SMALL, numTxt,
+                    Graphics.TEXT_JUSTIFY_LEFT | Graphics.TEXT_JUSTIFY_VCENTER);
     }
 
     // =========================================================================
