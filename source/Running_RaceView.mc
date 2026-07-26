@@ -11,7 +11,7 @@ import Toybox.WatchUi;
 // =============================================================================
 // Layout (design-px, scaled at runtime):
 //  y= 50  Feld 10  Power                cx=208  FONT_LARGE  zone colour
-//  y=108  Feld 11  Cadence  x=92   |  Feld 9  TargetPace cx=208 ORANGE  |  Feld 12  Reserve  x=324
+//  y=108  Feld 11  Cadence  x=92   |  Feld 9  TargetPace cx=208 MUTED  |  Feld 12  Reserve  x=324
 //  y=140  Feld  2  [panel cx=94 w=108]  |  Feld  8  Delta cx=208  |  Feld  3  [panel cx=322 w=108]
 //  y=208  [CENTER PANEL w=150 h=68]  Feld 6 x=92  Feld 1  Feld 7 x=324
 //  y=272  Feld  4  [panel cx=134 w=126 h=48]  |  Feld  5  [panel cx=282 w=126 h=48]
@@ -23,6 +23,12 @@ class Running_RaceView extends WatchUi.DataField {
 
     const DESIGN_SIZE = 416.0;
     const PI          = 3.14159265;
+
+    // DEV ONLY – when true, compute() skips live sensors and renders a fixed,
+    // representative mid-marathon state so the layout/colours can be reviewed in
+    // the simulator without a live activity.  Kept false in source; `run.ps1
+    // -Preview` flips it to true only for the duration of a screenshot build.
+    const PREVIEW_MODE = false;
 
     const COLOR_BG           = 0x060606;
     const COLOR_RING         = 0xB83B4F;
@@ -66,6 +72,7 @@ class Running_RaceView extends WatchUi.DataField {
     // wrapped whole in try/catch: a single unexpected sensor value must never
     // be allowed to throw out of here and freeze/kill the field mid-race.
     function compute(info as Activity.Info) as Void {
+        if (PREVIEW_MODE) { applyPreview(); return; }
         try {
             var elapsedSec = paceLogic.elapsedSec;
             var distKm     = paceLogic.distanceKm;
@@ -91,6 +98,31 @@ class Running_RaceView extends WatchUi.DataField {
         } catch (ex) {
             // Swallow: keep the last good values on screen rather than crash.
         }
+    }
+
+    // DEV ONLY – populate a fixed, internally-consistent race state (~13 km into
+    // a 5:00/km marathon, on pace) so the field can be reviewed without sensors.
+    function applyPreview() as Void {
+        paceLogic.elapsedSec         = 3900;       // 1:05:00
+        paceLogic.distanceKm         = 13.2;
+        paceLogic.remainingKm        = 29.0;
+        paceLogic.smoothedPaceSec    = 296.0;      // 4:56  (hero, slightly ahead)
+        paceLogic.averagePaceSec     = 299.0;      // 4:59
+        paceLogic.rolling5MinPaceSec = 298.0;      // 4:58
+        paceLogic.projectedFinishSec = 12500;      // 3:28:20 (under 3:30 target)
+
+        hrLogic.currentHr     = 155;
+        hrLogic.averageHr     = 150.0;
+        hrLogic.rolling5MinHr = 153.0;
+        hrLogic.driftActive   = false;
+
+        reserveLogic.reservePercent = 78;
+
+        currentPower     = 248;  hasPower = true;
+        currentCadence   = 176;
+        verticalRatio    = 7.8;  hasVerticalRatio = true;
+        gpsBars          = 4;
+        chestStatus      = 2;
     }
 
     function updatePerformanceMetrics(info as Activity.Info) as Void {

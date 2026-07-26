@@ -23,11 +23,27 @@ param(
     [string]$Jungle    = "monkey.jungle",
     [switch]$BuildOnly,
     [switch]$Shot,
+    [switch]$Preview,
     [string]$ShotPath  = "bin\sim_shot.png"
 )
 
 $ErrorActionPreference = "Stop"
 Set-Location -Path $PSScriptRoot
+
+# --- Dev preview toggle -------------------------------------------------------
+# -Preview flips the source PREVIEW_MODE const to true just for this build (so
+# the field renders a representative race state for a screenshot) and always
+# reverts it afterwards, so the flag is never left enabled in source.
+$viewFile = Join-Path $PSScriptRoot "source\Running_RaceView.mc"
+function Set-PreviewMode([bool]$on) {
+    $val = if ($on) { "true" } else { "false" }
+    $raw = [System.IO.File]::ReadAllText($viewFile)
+    $raw = [regex]::Replace($raw, "const PREVIEW_MODE = (?:true|false);",
+                            "const PREVIEW_MODE = $val;")
+    [System.IO.File]::WriteAllText($viewFile, $raw)
+}
+if ($Preview) { Set-PreviewMode $true; $Shot = $true }
+try {
 
 # --- Locate the SDK bin folder -----------------------------------------------
 function Get-SdkBin {
@@ -76,7 +92,11 @@ public class WinCap {
 
     if ([WinCap]::IsIconic($h)) { [WinCap]::ShowWindow($h, 9) | Out-Null }  # SW_RESTORE
     [WinCap]::SetForegroundWindow($h) | Out-Null
-    Start-Sleep -Milliseconds 600
+    Start-Sleep -Milliseconds 300
+    # Dismiss any stray dropdown menu so it can't cover the watch face.
+    Add-Type -AssemblyName System.Windows.Forms
+    [System.Windows.Forms.SendKeys]::SendWait("{ESC}")
+    Start-Sleep -Milliseconds 300
 
     $r = New-Object 'WinCap+RECT'
     [WinCap]::GetWindowRect($h, [ref]$r) | Out-Null
@@ -140,4 +160,8 @@ if ($Shot) {
     Save-SimShot -Path $ShotPath
 } else {
     & $monkeydo $Out $Device
+}
+} finally {
+    # Never leave the dev preview flag enabled in source.
+    if ($Preview) { Set-PreviewMode $false }
 }
