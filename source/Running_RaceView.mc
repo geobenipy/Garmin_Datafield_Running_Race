@@ -540,14 +540,19 @@ class Running_RaceView extends WatchUi.DataField {
         return paceLogic.projectedFinishSec <= config.targetTimeSec ? COLOR_GREEN : COLOR_RED;
     }
 
-    // Power / cadence / HR numbers stay neutral (white / muted); their zone is
-    // shown by the coloured arcs, so the numbers themselves need no colour.
+    // Effort metrics (power / HR) are tinted by training zone, so the number
+    // matches its own arc segment and effort reads at a glance:
+    //   z1 muted · z2 blue · z3 green · z4 orange · z5 red.
     function colorForPower(value as Number, available as Boolean) as Number {
-        return (!available || value <= 0) ? COLOR_MUTED : COLOR_WHITE;
+        if (!available || value <= 0) { return COLOR_MUTED; }
+        return colorForZoneIndex(
+            zoneIndexForValue(value, config.powerZones as Array<Number>));
     }
 
+    // Cadence carries a flat cyan accent (its zones are narrow and less telling
+    // than a zone tint would suggest).
     function colorForCadence(value as Number) as Number {
-        return value <= 0 ? COLOR_MUTED : COLOR_WHITE;
+        return value <= 0 ? COLOR_MUTED : COLOR_BLUE;
     }
 
     // Reserve is neutral until it runs low, then a single red warning.
@@ -555,8 +560,11 @@ class Running_RaceView extends WatchUi.DataField {
         return value < 40 ? COLOR_RED : COLOR_WHITE;
     }
 
+    // HR numbers tinted by training zone (matches the HR arc segments).
     function colorForHrValue(value as Float) as Number {
-        return value <= 0.0 ? COLOR_MUTED : COLOR_WHITE;
+        if (value <= 0.0) { return COLOR_MUTED; }
+        return colorForZoneIndex(
+            zoneIndexForValue(value.toNumber(), config.hrZones as Array<Number>));
     }
 
     function colorForVerticalRatio() as Number {
