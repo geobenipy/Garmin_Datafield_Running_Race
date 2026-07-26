@@ -2,7 +2,6 @@ import Toybox.Activity;
 import Toybox.Graphics;
 import Toybox.Lang;
 import Toybox.Math;
-import Toybox.Position;
 import Toybox.Sensor;
 import Toybox.System;
 import Toybox.WatchUi;
@@ -40,10 +39,7 @@ class Running_RaceView extends WatchUi.DataField {
     const COLOR_RED          = 0xD24B3D;
     const COLOR_ORANGE       = 0xE59B3E;
     const COLOR_PANEL_CENTER = 0x243244;   // hero pace tile – slightly elevated
-    const COLOR_PANEL_TIME    = 0x181D24;  // calm dark slate (times)
-    const COLOR_PANEL_DIST    = 0x181D24;  // calm dark slate (dist / remaining)
-    const COLOR_PANEL_BLACK  = 0x111111;
-    const COLOR_TRACK        = 0x333333;
+    const COLOR_TRACK        = 0x333333;   // empty (unfilled) part of a zone arc
 
     var config;
     var paceLogic;
@@ -53,10 +49,7 @@ class Running_RaceView extends WatchUi.DataField {
 
     var currentPower     = 0;
     var hasPower         = false;
-    var currentCadence   = 0;
-    var verticalRatio    = 0.0;
-    var hasVerticalRatio = false;
-    var gpsBars          = 0;
+    var hasVerticalRatio = false;   // implies a chest strap / RD pod is present
     var chestStatus      = 0;
     var phoneConnected   = false;
 
@@ -94,7 +87,7 @@ class Running_RaceView extends WatchUi.DataField {
                 paceLogic.refreshHeavy();
                 hrLogic.refreshHeavy(paceLogic);
                 reserveLogic.refreshHeavy(paceLogic, hrLogic, currentPower, hasPower);
-                refreshSensorStatus(info);
+                refreshSensorStatus();
                 alertLogic.checkFiveKmFeedback(paceLogic, hrLogic, reserveLogic.reservePercent);
             }
         } catch (ex) {
@@ -121,32 +114,22 @@ class Running_RaceView extends WatchUi.DataField {
         reserveLogic.reservePercent = 78;
 
         currentPower     = 248;  hasPower = true;
-        currentCadence   = 176;
-        verticalRatio    = 7.8;  hasVerticalRatio = true;
-        gpsBars          = 4;
+        hasVerticalRatio = true;
         chestStatus      = 2;
         phoneConnected   = true;
     }
 
     function updatePerformanceMetrics(info as Activity.Info) as Void {
         hasPower = false;
-        if (info.currentPower  != null && info.currentPower  > 0) { currentPower  = info.currentPower  as Number; hasPower = true; }
-        if (info.currentCadence!= null && info.currentCadence> 0) { currentCadence= info.currentCadence as Number; }
+        if (info.currentPower != null && info.currentPower > 0) { currentPower = info.currentPower as Number; hasPower = true; }
         hasVerticalRatio = false;
         if (info has :verticalRatio) {
             var vr = info.verticalRatio;
-            if (vr != null && vr > 0.0) { verticalRatio = vr as Float; hasVerticalRatio = true; }
+            if (vr != null && vr > 0.0) { hasVerticalRatio = true; }
         }
     }
 
-    function refreshSensorStatus(info as Activity.Info) as Void {
-        gpsBars = 0;
-        if (info has :gpsAccuracy) {
-            var acc = info.gpsAccuracy;
-            if      (acc == Position.QUALITY_GOOD)   { gpsBars = 4; }
-            else if (acc == Position.QUALITY_USABLE) { gpsBars = 3; }
-            else if (acc == Position.QUALITY_POOR)   { gpsBars = 1; }
-        }
+    function refreshSensorStatus() as Void {
         chestStatus = 0;
         try {
             if (Sensor has :getRegisteredSensors) {
@@ -464,16 +447,6 @@ class Running_RaceView extends WatchUi.DataField {
         return Graphics.FONT_SMALL;
     }
 
-    function pickCompactFont(dc as Dc, text as String, maxW as Number) {
-        if (textWidth(dc, text, Graphics.FONT_MEDIUM) <= maxW) { return Graphics.FONT_MEDIUM; }
-        return Graphics.FONT_SMALL;
-    }
-
-    function pickTimeFont(dc as Dc, text as String, maxW as Number) {
-        if (textWidth(dc, text, Graphics.FONT_MEDIUM) <= maxW) { return Graphics.FONT_MEDIUM; }
-        return Graphics.FONT_SMALL;
-    }
-
     function textWidth(dc as Dc, text as String, font) as Number {
         var dims = dc.getTextDimensions(text, font);
         return (dims != null && dims.size() > 0) ? dims[0] as Number : 0;
@@ -515,12 +488,6 @@ class Running_RaceView extends WatchUi.DataField {
             zoneIndexForValue(value, config.powerZones as Array<Number>));
     }
 
-    // Cadence carries a flat cyan accent (its zones are narrow and less telling
-    // than a zone tint would suggest).
-    function colorForCadence(value as Number) as Number {
-        return value <= 0 ? COLOR_MUTED : COLOR_BLUE;
-    }
-
     // Reserve is neutral until it runs low, then a single red warning.
     function colorForReserve(value as Number) as Number {
         return value < 40 ? COLOR_RED : COLOR_WHITE;
@@ -531,10 +498,6 @@ class Running_RaceView extends WatchUi.DataField {
         if (value <= 0.0) { return COLOR_MUTED; }
         return colorForZoneIndex(
             zoneIndexForValue(value.toNumber(), config.hrZones as Array<Number>));
-    }
-
-    function colorForVerticalRatio() as Number {
-        return hasVerticalRatio ? COLOR_WHITE : COLOR_MUTED;
     }
 
     function zoneIndexForValue(value as Number, thresholds as Array<Number>) as Number {
@@ -585,12 +548,7 @@ class Running_RaceView extends WatchUi.DataField {
     function formatPower(value as Number, available as Boolean) as String {
         return (!available || value <= 0) ? "--" : value.format("%d");
     }
-    function formatCadence(value as Number) as String   { return value > 0 ? value.format("%d") : "--"; }
     function formatReserve(value as Number) as String   { return value.format("%d") + "%"; }
-    function formatVerticalRatio() as String {
-        if (!hasVerticalRatio) { return "--.--%"; }
-        return verticalRatio.format("%.1f") + "%";
-    }
     function formatHeartRateNumber(value) as String {
         if (value == null || value <= 0) { return "--"; }
         return roundNumber(value).format("%d");
@@ -602,7 +560,6 @@ class Running_RaceView extends WatchUi.DataField {
     function S(value as Number, scale as Float) as Number {
         return roundNumber(value.toFloat() * scale);
     }
-    function scaled(value as Number, scale as Float) as Number { return S(value, scale); }
     function toRadians(degrees as Float) as Float { return degrees * PI / 180.0; }
     function toGarminDegrees(degrees as Float) as Float {
         var g = 360.0 - degrees;
