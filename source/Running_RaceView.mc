@@ -4,6 +4,7 @@ import Toybox.Lang;
 import Toybox.Math;
 import Toybox.Position;
 import Toybox.Sensor;
+import Toybox.System;
 import Toybox.WatchUi;
 
 // =============================================================================
@@ -57,6 +58,7 @@ class Running_RaceView extends WatchUi.DataField {
     var hasVerticalRatio = false;
     var gpsBars          = 0;
     var chestStatus      = 0;
+    var phoneConnected   = false;
 
     function initialize() {
         DataField.initialize();
@@ -123,6 +125,7 @@ class Running_RaceView extends WatchUi.DataField {
         verticalRatio    = 7.8;  hasVerticalRatio = true;
         gpsBars          = 4;
         chestStatus      = 2;
+        phoneConnected   = true;
     }
 
     function updatePerformanceMetrics(info as Activity.Info) as Void {
@@ -161,6 +164,12 @@ class Running_RaceView extends WatchUi.DataField {
             }
         } catch (e) { chestStatus = 0; }
         if (hasVerticalRatio && chestStatus < 2) { chestStatus = 2; }
+
+        phoneConnected = false;
+        var ds = System.getDeviceSettings();
+        if (ds != null && ds has :phoneConnected && ds.phoneConnected != null) {
+            phoneConnected = ds.phoneConnected;
+        }
     }
 
     function onTimerLap() as Void {
@@ -198,9 +207,9 @@ class Running_RaceView extends WatchUi.DataField {
                     config.hrZones    as Array<Number>, hrLogic.currentHr);
         drawOuterRing(dc, cx, cy, S(202, scale));
 
-        // No custom sensor icons: only Garmin built-in primitives are used for
-        // graphics (drawArc for the colour bars, fillRoundedRectangle for the
-        // hero tile, drawText for values).
+        // All graphics use Garmin built-in primitives only: drawArc for the
+        // colour bars, fillRoundedRectangle for the hero tile and phone glyph,
+        // fillCircle/fillPolygon for the heart glyph, drawText for values.
 
         // =====================================================================
         // Lean 10-field layout on the round face.  Every value lives inside the
@@ -216,11 +225,14 @@ class Running_RaceView extends WatchUi.DataField {
         //   R5  y=310/352  5-min HR (small) over Current HR (big)  [HR arc]
         // =====================================================================
 
-        // ── R1  Power ────────────────────────────────────────────────────
+        // ── R1  Power + connection status (phone | HR strap) ─────────────
         var pwrTxt = formatPower(currentPower, hasPower);
         lbl(dc, cx, S(66, scale), pwrTxt,
             pickEmphasisFont(dc, pwrTxt, S(150, scale)),
             colorForPower(currentPower, hasPower));
+
+        drawPhoneIcon(dc, S(138, scale), S(64, scale), scale, phoneConnected);
+        drawHeartIcon(dc, S(278, scale), S(64, scale), scale, chestStatus >= 1);
 
         // ── R2  Distanz (done/total) | Reserve % ─────────────────────────
         var distTxt = formatDistance(paceLogic.distanceKm) + "/" +
@@ -312,28 +324,34 @@ class Running_RaceView extends WatchUi.DataField {
     // =========================================================================
     // Sensor icons
     // =========================================================================
-    function drawChestIcon(dc as Dc, x as Number, y as Number,
-                           dotR as Number) as Void {
-        var color = chestStatus == 2 ? COLOR_WHITE
-                  : chestStatus == 1 ? COLOR_BLUE
-                  : COLOR_MUTED;
-        dc.setColor(color, Graphics.COLOR_TRANSPARENT);
-        dc.drawLine(x - 9, y + 2, x,      y + 2);
-        dc.drawLine(x,     y + 2, x + 10, y + 9);
-        dc.drawLine(x,     y + 2, x + 1,  y - 9);
-        dc.fillCircle(x - 12, y + 2, dotR);
-        dc.fillCircle(x + 1,  y - 9, dotR);
-        dc.fillCircle(x + 10, y + 9, dotR + 2);
+    // Connection-status glyphs, built from Garmin built-in primitives.
+    // Bright (white) when connected, dimmed to muted grey when not.
+    function drawPhoneIcon(dc as Dc, cx as Number, cy as Number,
+                           scale as Float, connected as Boolean) as Void {
+        dc.setColor(connected ? COLOR_WHITE : COLOR_MUTED, Graphics.COLOR_TRANSPARENT);
+        var bw = S(12, scale);
+        var bh = S(19, scale);
+        dc.setPenWidth(S(2, scale));
+        dc.drawRoundedRectangle(cx - bw / 2, cy - bh / 2, bw, bh, S(3, scale));
+        dc.setPenWidth(1);
+        // speaker slit (top) and home dot (bottom) make it read as a phone
+        dc.fillRectangle(cx - S(3, scale), cy - bh / 2 + S(3, scale), S(6, scale), S(2, scale));
+        dc.fillCircle(cx, cy + bh / 2 - S(4, scale), S(1, scale));
     }
 
-    function drawGpsIcon(dc as Dc, x as Number, y as Number,
-                         barW as Number) as Void {
-        for (var i = 0; i < 4; i += 1) {
-            var barH = (i + 1) * 6;
-            dc.setColor(gpsBars > i ? COLOR_WHITE : COLOR_TRACK,
-                        gpsBars > i ? COLOR_WHITE : COLOR_TRACK);
-            dc.fillRectangle(x + (i * (barW + 1)), y + 8 - barH, barW, barH);
-        }
+    function drawHeartIcon(dc as Dc, cx as Number, cy as Number,
+                           scale as Float, connected as Boolean) as Void {
+        dc.setColor(connected ? COLOR_WHITE : COLOR_MUTED, Graphics.COLOR_TRANSPARENT);
+        var lobeR  = S(5, scale);
+        var lobeDx = S(4, scale);
+        var lobeDy = S(3, scale);
+        dc.fillCircle(cx - lobeDx, cy - lobeDy, lobeR);
+        dc.fillCircle(cx + lobeDx, cy - lobeDy, lobeR);
+        dc.fillPolygon([
+            [cx - S(9, scale), cy - lobeDy],
+            [cx + S(9, scale), cy - lobeDy],
+            [cx, cy + S(10, scale)]
+        ]);
     }
 
     // =========================================================================
