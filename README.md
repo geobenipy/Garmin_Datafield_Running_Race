@@ -24,9 +24,17 @@ step. Run it from this folder in a PowerShell terminal:
 .\run.ps1                 # build + launch on fenix843mm (default)
 .\run.ps1 -BuildOnly      # compile only, no simulator
 .\run.ps1 -Test           # build + run the unit tests
+.\run.ps1 -Deploy         # release build + copy onto a connected watch
 .\run.ps1 -Device fr965   # target a different device
 .\run.ps1 -Shot           # build + launch + save bin\sim_shot.png (screenshot)
 ```
+
+`-Deploy` builds with `-r` (release) and copies the PRG into `GARMIN\Apps` on
+the watch. The fenix 8 mounts over MTP, so it has no drive letter and ordinary
+file copying cannot reach it — the script goes through the Windows shell
+namespace instead, and verifies the file actually arrived (MTP copies are
+asynchronous and fail silently). Connect the watch by USB and unlock it first.
+Afterwards, unplug it and add the field to a running activity's data screens.
 
 `-Shot` captures the simulator window to `bin\sim_shot.png` (gitignored) so the
 rendered layout can be reviewed without taking a manual screenshot.

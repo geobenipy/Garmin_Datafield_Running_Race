@@ -30,6 +30,7 @@ param(
     [string]$Jungle    = "monkey.jungle",
     [switch]$BuildOnly,
     [switch]$Test,
+    [switch]$Deploy,
     [switch]$Shot,
     [switch]$Preview,
     [string]$ShotPath  = "bin\sim_shot.png"
@@ -177,6 +178,55 @@ if ($Test) {
         throw "Unit tests did not pass. See the output above."
     }
     Write-Host "All tests passed." -ForegroundColor Green
+    return
+}
+
+# --- Deploy to a connected watch ----------------------------------------------
+# The fenix 8 mounts over MTP, so it has no drive letter and Copy-Item cannot
+# reach it; the shell namespace is the only way in.  Builds with -r (release):
+# a debug PRG carries symbol data a data field has no use for on the wrist.
+if ($Deploy) {
+    $relOut = Join-Path $outDir "Running_Race_release.prg"
+    Write-Host "Building RELEASE $relOut for $Device ..." -ForegroundColor Cyan
+    & $monkeyc -f $Jungle -o $relOut -y $Key -d $Device -w -r
+    if ($LASTEXITCODE -ne 0) { throw "Release build failed (exit $LASTEXITCODE)." }
+
+    $shell = New-Object -ComObject Shell.Application
+    $dev = $shell.NameSpace(17).Items() | Where-Object { $_.Name -like "fenix*" -or $_.Name -like "*Forerunner*" -or $_.Name -like "*Garmin*" } | Select-Object -First 1
+    if (-not $dev) { throw "No Garmin watch found. Connect it by USB and unlock it." }
+
+    $store = $dev.GetFolder.Items() | Where-Object { $_.IsFolder } | Select-Object -First 1
+    $garmin = $store.GetFolder.Items() | Where-Object { $_.Name -eq "GARMIN" }
+    if (-not $garmin) { throw "No GARMIN folder on $($dev.Name)." }
+    $apps = $garmin.GetFolder.Items() | Where-Object { $_.Name -match '^Apps$' }
+    if (-not $apps) { throw "No GARMIN\Apps folder on $($dev.Name)." }
+    $appsFolder = $apps.GetFolder
+
+    # Copy under the name the watch expects, from a temp dir so the PRG on the
+    # watch is not called "..._release".
+    $stage = Join-Path $env:TEMP ("ciq_" + [guid]::NewGuid().ToString("N"))
+    New-Item -ItemType Directory -Force -Path $stage | Out-Null
+    $staged = Join-Path $stage "Running_Race.prg"
+    Copy-Item $relOut $staged -Force
+
+    $existing = $appsFolder.Items() | Where-Object { $_.Name -match '^Running_Race' }
+    if ($existing) { Write-Host "Replacing existing $($existing.Name) on the watch." -ForegroundColor DarkGray }
+
+    Write-Host "Copying to $($dev.Name) : GARMIN\Apps ..." -ForegroundColor Cyan
+    $appsFolder.CopyHere($staged, 16)   # 16 = answer "yes to all" on overwrite
+
+    # CopyHere is asynchronous over MTP; wait for the file to actually appear.
+    $want = (Get-Item $relOut).Length
+    $ok = $false
+    for ($i = 0; $i -lt 60; $i++) {
+        Start-Sleep -Milliseconds 500
+        $f = $appsFolder.Items() | Where-Object { $_.Name -match '^Running_Race\.prg$' -or $_.Name -match '^Running_Race$' }
+        if ($f) { $ok = $true; break }
+    }
+    Remove-Item $stage -Recurse -Force -ErrorAction SilentlyContinue
+    if (-not $ok) { throw "The PRG never showed up in GARMIN\Apps - copy failed." }
+    Write-Host "Deployed Running_Race.prg ($want bytes) to $($dev.Name)." -ForegroundColor Green
+    Write-Host "Unplug the watch, then add the field via a running activity's data screens." -ForegroundColor DarkGray
     return
 }
 
