@@ -1,14 +1,19 @@
 import Toybox.Lang;
-import Toybox.SensorHistory;
 
 // ---------------------------------------------------------------------------
 // RaceHeartRateLogic  –  HR tracking, rolling average, drift detection
 // ---------------------------------------------------------------------------
 // FIX: Removed unreachable `instanceof Number` branch in loadHrZones caller.
 //      All array accesses now have explicit `as Type` casts.
+//
+// CRASH FIX: trimSamples() had the same never-terminating loop as the one in
+//      RacePaceLogic — see the comment on trimSamples() down below.
 // ---------------------------------------------------------------------------
 
 class RaceHeartRateLogic {
+
+    // See RacePaceLogic.TRIM_SLACK
+    const TRIM_SLACK = 32;
 
     var config;
 
@@ -28,59 +33,39 @@ class RaceHeartRateLogic {
     }
 
     // -----------------------------------------------------------------------
-    // Called every compute() cycle
+    // Called every compute() cycle.  Takes the raw bpm reading (may be null)
+    // rather than an Activity.Info, so the whole update path is testable.
     // -----------------------------------------------------------------------
-    function update(info, isNewSecond as Boolean) as Void {
-        if (info.currentHeartRate != null && info.currentHeartRate > 0) {
-            currentHr = info.currentHeartRate as Number;
+    function update(heartRate, isNewSecond as Boolean) as Void {
+        if (heartRate != null && heartRate > 0 && heartRate < 300) {
+            currentHr = heartRate.toNumber();
         }
 
         if (isNewSecond && currentHr > 0) {
             hrSamples.add(currentHr);
-            trimSamples(hrSamples, config.sampleWindowSec);
+            hrSamples = trimSamples(hrSamples, config.sampleWindowSec);
         }
     }
 
     // -----------------------------------------------------------------------
     // Heavy refresh (every config.heavyUpdateSec seconds)
     // -----------------------------------------------------------------------
+    // The rolling average comes from this class's own 1 Hz ring buffer, which
+    // is a true rolling `rollingWindowSec` of the *current activity*.
+    //
+    // It used to come from SensorHistory.getHeartRateHistory({:period => 300}).
+    // That was wrong: a Number :period means "the last 300 ENTRIES", not 300
+    // seconds, and the watch writes HR history only every minute or two — so it
+    // was averaging hours of history including resting HR.  rolling5MinHr came
+    // out far below the running HR, which pinned the drift arrow to "rising"
+    // for the whole race and made RaceReserveLogic read the effort as easier
+    // than it was.  Dropping it also takes an iterator loop and a permission
+    // out of the heavy tier.
+    // -----------------------------------------------------------------------
     function refreshHeavy(paceLogic as RacePaceLogic) as Void {
-        var historyHr = getHistoryRollingHr(config.rollingWindowSec);
-        if (historyHr > 0.0) {
-            rolling5MinHr = historyHr;
-        } else {
-            rolling5MinHr = averageRange(hrSamples, config.rollingWindowSec, 0);
-        }
-
+        rolling5MinHr = averageRange(hrSamples, config.rollingWindowSec, 0);
         evaluateDrift(paceLogic);
         lastHeavyUpdateSec = paceLogic.elapsedSec;
-    }
-
-    // -----------------------------------------------------------------------
-    // SensorHistory-based rolling HR average
-    // -----------------------------------------------------------------------
-    function getHistoryRollingHr(periodSeconds as Number) as Float {
-        try {
-            var iterator = SensorHistory.getHeartRateHistory({
-                :period => periodSeconds,
-                :order  => SensorHistory.ORDER_NEWEST_FIRST
-            });
-            // No null-check needed: getHeartRateHistory() always returns a
-            // valid iterator or throws – a null return is not possible.
-            var sum    = 0.0;
-            var count  = 0;
-            var sample = iterator.next();
-            while (sample != null) {
-                if (sample.data != null && sample.data > 0) {
-                    sum   += (sample.data as Number).toFloat();
-                    count += 1;
-                }
-                sample = iterator.next();
-            }
-            return count > 0 ? sum / count.toFloat() : 0.0;
-        } catch (e) {
-            return 0.0;
-        }
     }
 
     // -----------------------------------------------------------------------
@@ -140,8 +125,17 @@ class RaceHeartRateLogic {
     // -----------------------------------------------------------------------
     // Helpers
     // -----------------------------------------------------------------------
-    function trimSamples(samples as Array<Number>, maxCount as Number) as Void {
-        while (samples.size() > maxCount) { samples.remove(0); }
+    // CRASH FIX — identical to RacePaceLogic.trimSamples().  The old
+    //     while (samples.size() > maxCount) { samples.remove(0); }
+    // never terminated: Array.remove() removes by VALUE, and no HR sample is
+    // ever 0, so the array never shrank and compute() hung until the watchdog
+    // killed the field.  slice() is the index-based cut.
+    function trimSamples(samples as Array<Number>,
+                         maxCount as Number) as Array<Number> {
+        if (maxCount <= 0) { return [] as Array<Number>; }
+        var n = samples.size();
+        if (n <= maxCount + TRIM_SLACK) { return samples; }
+        return samples.slice(n - maxCount, null) as Array<Number>;
     }
 
     // FIX: explicit `as Number` cast on array element access eliminates

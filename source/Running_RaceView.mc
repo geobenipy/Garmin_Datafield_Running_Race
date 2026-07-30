@@ -2,29 +2,51 @@ import Toybox.Activity;
 import Toybox.Graphics;
 import Toybox.Lang;
 import Toybox.Math;
-import Toybox.Sensor;
-import Toybox.System;
 import Toybox.WatchUi;
 
 // =============================================================================
 // Running_RaceView  –  Garmin Fenix 8 43mm  (416 × 416 px design canvas)
 // =============================================================================
-// Lean 10-value round-face layout (design-px, scaled at runtime).  Every value
-// sits inside the ~r168 circle the two zone arcs (r182) leave free, so nothing
-// ever touches a colour bar.
-//   R1  y= 66  TOP effort (centre, big)  ·  phone + HR-strap glyphs  [top arc]
-//   R2  y=132  Distanz done/total (left)        |  Reserve %  (right)
-//   R3  y=200  Ø-Pace | CURRENT PACE (hero tile) | Delta-to-target
-//   R4  y=262  Elapsed (left)                    |  Projected finish (right)
-//   R5  y=310  5-min HR (small)  over  y=352 current HR (big)      [bottom arc]
-// The TOP number and the TOP zone arc both track whichever effort metric the
-// hardware provides: running power when a meter is present, else cadence.
+// Pace-first round-face layout (design-px, scaled at runtime).  Every value
+// sits inside the ~r168 circle the HR zone arc (r182) leaves free, so nothing
+// ever touches the colour bar.
+//   R1  y= 56  phone + HR-strap glyphs        [race progress arc above them]
+//   R2  y=126  Distanz done/total (left)   |  Reserve % (right)
+//   R3  y=208  HERO tile: current pace, huge · Ø-pace + lap pace underneath
+//   R4  y=297  Elapsed (left)              |  Projected finish (right)
+//   R5  y=352  current HR (big) + drift trend arrow beside it        [HR arc]
+//
+// R2 + R3 are deliberately one tight cluster (distance, stamina, current pace,
+// lap and average pace): they are what you read as a group mid-race.  R4 and
+// R5 sit further out because they answer different questions.
+//
+// Three rules keep this readable on a 43 mm round face:
+//   · The four secondary values all share one small font.  They are context;
+//     the hero pace and the HR are the only things meant to be read at speed.
+//   · Nothing wider than ~140 px sits above y=110 or below y=310 — that is all
+//     the room the circle leaves there once the hero tile has taken the middle.
+//     The projected finish is h:mm for the same reason (and because a
+//     projection that re-jitters every 10 s has no business showing seconds).
+//   · The two arcs are obstacles, not just decoration: both sets of end caps
+//     lie at y=104 (top) and y=312 (bottom), out at x=59 and x=357.  Text rows
+//     have to clear those, which is what fixes R2 at 126 and R4 at 297.
+//
+// The hero pace carries the whole target comparison by colour:
+//   green = within tolerance · orange = too fast · red = too slow.
+// The HR arc is zoomed to HR_ARC_MIN_BPM..zone5, because nothing below that is
+// ever seen while racing and the full 0..max scale wasted most of the bar.
+//
+// The view only draws.  RaceEngine owns the update path — see RaceEngine.mc.
 // =============================================================================
 
 class Running_RaceView extends WatchUi.DataField {
 
     const DESIGN_SIZE = 416.0;
     const PI          = 3.14159265;
+
+    // The HR arc starts here instead of at 0 bpm: a racing heart rate never
+    // goes below it, so the whole bar is spent on the range that matters.
+    const HR_ARC_MIN_BPM = 100.0;
 
     // DEV ONLY – when true, compute() skips live sensors and renders a fixed,
     // representative mid-marathon state so the layout/colours can be reviewed in
@@ -43,71 +65,35 @@ class Running_RaceView extends WatchUi.DataField {
     const COLOR_PANEL_CENTER = 0x243244;   // hero pace tile – slightly elevated
     const COLOR_TRACK        = 0x333333;   // empty (unfilled) part of a zone arc
 
+    var engine;
+
+    // Aliases onto the engine's logic objects so the drawing code below reads
+    // exactly as it did when the view owned them.
     var config;
     var paceLogic;
     var hrLogic;
     var reserveLogic;
     var alertLogic;
 
-    var currentPower     = 0;
-    var hasPower         = false;
-    var currentCadence   = 0;
-    var hasCadence       = false;
-    var hasVerticalRatio = false;   // implies a chest strap / RD pod is present
-    var chestStatus      = 0;
-    var phoneConnected   = false;
-
     function initialize() {
         DataField.initialize();
-        config       = new RaceConfig();
-        paceLogic    = new RacePaceLogic(config);
-        hrLogic      = new RaceHeartRateLogic(config);
-        reserveLogic = new RaceReserveLogic(config);
-        alertLogic   = new RaceAlertLogic(config);
+        engine       = new RaceEngine();
+        config       = engine.config;
+        paceLogic    = engine.paceLogic;
+        hrLogic      = engine.hrLogic;
+        reserveLogic = engine.reserveLogic;
+        alertLogic   = engine.alertLogic;
     }
 
-    // -------------------------------------------------------------------------
-    // compute() runs several times per second on a tight time budget. It is
-    // wrapped whole in try/catch: a single unexpected sensor value must never
-    // be allowed to throw out of here and freeze/kill the field mid-race.
+    // compute() runs several times per second on a tight time budget.  All of
+    // the work — including its try/catch guard — lives in RaceEngine.
     function compute(info as Activity.Info) as Void {
         if (PREVIEW_MODE) { applyPreview(); return; }
-        try {
-            var elapsedSec = paceLogic.elapsedSec;
-            var distKm     = paceLogic.distanceKm;
-            if (info.elapsedTime     != null) { elapsedSec = (info.elapsedTime / 1000).toNumber(); }
-            if (info.elapsedDistance != null) { distKm     = info.elapsedDistance / 1000.0; }
+        engine.onCompute(info);
+    }
 
-            // Course awareness: PacePro's target pace is not exposed by CIQ, but
-            // a loaded route is.  When navigating, feed the true remaining
-            // distance so "remaining" and the finish projection track the real
-            // course; 0 keeps the configured race distance as the fallback.
-            var courseRemainingKm = 0.0;
-            if (info has :distanceToDestination) {
-                var dtd = info.distanceToDestination;
-                if (dtd != null && dtd > 0.0) { courseRemainingKm = dtd / 1000.0; }
-            }
-            paceLogic.courseRemainingKm = courseRemainingKm;
-
-            var isNewSecond = paceLogic.update(elapsedSec, distKm,
-                                               info.currentSpeed, info.averageSpeed);
-            hrLogic.update(info, isNewSecond);
-            updatePerformanceMetrics(info);
-
-            if (isNewSecond) {
-                alertLogic.clearExpiredBanner(paceLogic.elapsedSec);
-                alertLogic.checkNutrition(paceLogic);
-            }
-            if (paceLogic.isHeavyRefreshDue()) {
-                paceLogic.refreshHeavy();
-                hrLogic.refreshHeavy(paceLogic);
-                reserveLogic.refreshHeavy(paceLogic, hrLogic, currentPower, hasPower);
-                refreshSensorStatus();
-                alertLogic.checkFiveKmFeedback(paceLogic, hrLogic, reserveLogic.reservePercent);
-            }
-        } catch (ex) {
-            // Swallow: keep the last good values on screen rather than crash.
-        }
+    function onTimerLap() as Void {
+        engine.onTimerLap();
     }
 
     // DEV ONLY – populate a fixed, internally-consistent race state (~13 km into
@@ -120,6 +106,9 @@ class Running_RaceView extends WatchUi.DataField {
         paceLogic.averagePaceSec     = 299.0;      // 4:59
         paceLogic.rolling5MinPaceSec = 298.0;      // 4:58
         paceLogic.projectedFinishSec = 12500;      // 3:28:20 (under 3:30 target)
+        // 0.2 km into the 14th km, 58 s ago -> L reads 4:50
+        paceLogic.lapAnchorDistanceKm = 13.0;
+        paceLogic.lapAnchorElapsedSec = 3842.0;
 
         hrLogic.currentHr     = 155;
         hrLogic.rolling5MinHr = 150.0;      // +5 vs current → rising trend arrow
@@ -127,59 +116,12 @@ class Running_RaceView extends WatchUi.DataField {
 
         reserveLogic.reservePercent = 78;
 
-        currentPower     = 248;  hasPower   = true;
-        currentCadence   = 178;  hasCadence = true;
-        hasVerticalRatio = true;
-        chestStatus      = 2;
-        phoneConnected   = true;
-    }
-
-    function updatePerformanceMetrics(info as Activity.Info) as Void {
-        hasPower = false;
-        if (info.currentPower != null && info.currentPower > 0) { currentPower = info.currentPower as Number; hasPower = true; }
-        hasCadence = false;
-        if (info.currentCadence != null && info.currentCadence > 0) { currentCadence = info.currentCadence as Number; hasCadence = true; }
-        hasVerticalRatio = false;
-        if (info has :verticalRatio) {
-            var vr = info.verticalRatio;
-            if (vr != null && vr > 0.0) { hasVerticalRatio = true; }
-        }
-    }
-
-    function refreshSensorStatus() as Void {
-        chestStatus = 0;
-        try {
-            if (Sensor has :getRegisteredSensors) {
-                var it = Sensor.getRegisteredSensors(Sensor.SENSOR_HEARTRATE);
-                if (it != null) {
-                    var s = it.next();
-                    while (s != null) {
-                        if (s.enabled) {
-                            if (s.technology == Sensor.SENSOR_TECHNOLOGY_ANT) { chestStatus = 2; return; }
-                            if (chestStatus < 1) { chestStatus = 1; }
-                        }
-                        s = it.next();
-                    }
-                }
-            }
-        } catch (e) { chestStatus = 0; }
-        if (hasVerticalRatio && chestStatus < 2) { chestStatus = 2; }
-
-        phoneConnected = false;
-        var ds = System.getDeviceSettings();
-        if (ds != null && ds has :phoneConnected && ds.phoneConnected != null) {
-            phoneConnected = ds.phoneConnected;
-        }
-    }
-
-    function onTimerLap() as Void {
-        paceLogic.handleLapTrigger();
-        hrLogic.resetDrift(paceLogic.lastLapResetSec);
-        alertLogic.showBanner("Lap synced", COLOR_BLUE, paceLogic.elapsedSec + 8);
+        engine.chestStatus    = 2;
+        engine.phoneConnected = true;
     }
 
     // =========================================================================
-    // onUpdate  – draw the 10 fields (lean layout)
+    // onUpdate  – draw the pace-first layout
     // =========================================================================
     function onUpdate(dc as Dc) as Void {
         var w      = dc.getWidth();
@@ -198,106 +140,44 @@ class Running_RaceView extends WatchUi.DataField {
         try {
         dc.fillCircle(cx, cy, S(202, scale));
 
-        // Top effort metric adapts to the hardware: running power when a meter
-        // is present, else cadence (form).  The top number and the top zone arc
-        // both track it, so the best available effort signal owns the crown.
-        var topText;
-        var topColor;
-        var topZones = config.powerZones as Array<Number>;
-        var topValue = 0;
-        if (hasPower) {
-            topValue = currentPower;
-            topText  = formatPower(currentPower, true);
-            topColor = colorForPower(currentPower, true);
-        } else if (hasCadence) {
-            topValue = currentCadence;
-            topZones = config.cadenceZones as Array<Number>;
-            topText  = formatCadence(currentCadence, true);
-            topColor = colorForCadence(currentCadence, true);
-        } else {
-            topText  = "--";
-            topColor = COLOR_MUTED;
-        }
-
-        // ── zone arcs ─────────────────────────────────────────────────────
-        var arcR = S(182, scale);
-        var arcT = S(9,   scale);
-        drawZoneArc(dc, cx, cy, arcR, arcT, 215.0, 325.0, topZones, topValue);
-        drawZoneArc(dc, cx, cy, arcR, arcT, 145.0, 35.0,
-                    config.hrZones    as Array<Number>, hrLogic.currentHr);
-        drawOuterRing(dc, cx, cy, S(202, scale));
-
+        // ── Arcs (race progress on top, HR zones at the bottom) + ring ────
         // All graphics use Garmin built-in primitives only: drawArc for the
         // colour bars, fillRoundedRectangle for the hero tile and phone glyph,
         // fillCircle/fillPolygon for the heart glyph, drawText for values.
+        drawProgressArc(dc, cx, cy, S(182, scale), S(9, scale), 215.0, 325.0,
+                        paceLogic.raceProgress());
+        drawZoneArc(dc, cx, cy, S(182, scale), S(9, scale), 145.0, 35.0,
+                    config.hrZones as Array<Number>, hrLogic.currentHr,
+                    HR_ARC_MIN_BPM);
+        drawOuterRing(dc, cx, cy, S(202, scale));
 
-        // =====================================================================
-        // Lean 10-field layout on the round face.  Every value lives inside the
-        // ~r168 circle the two zone arcs (r182) leave free, so nothing ever
-        // touches a colour bar.  Vertical spine of three anchors — Power (top),
-        // current PACE (centre hero tile), current HR (bottom) — with the
-        // secondary values as big plain text pushed toward the sides to fill
-        // the face and cut the black space:
-        //   R1  y= 66  Power (centre, big)                         [power arc]
-        //   R2  y=132  Distanz "done/total" | Reserve %
-        //   R3  y=200  Ø-Pace | CURRENT PACE (hero tile) | Delta
-        //   R4  y=262  Elapsed | Finish
-        //   R5  y=310/352  5-min HR (small) over Current HR (big)  [HR arc]
-        // =====================================================================
-
-        // ── R1  Top effort (power/cadence) + connection status ───────────
-        lbl(dc, cx, S(66, scale), topText,
-            pickEmphasisFont(dc, topText, S(150, scale)), topColor);
-
-        drawPhoneIcon(dc, S(138, scale), S(64, scale), scale, phoneConnected);
-        drawHeartIcon(dc, S(278, scale), S(64, scale), scale, chestStatus >= 1);
+        // ── R1  connection status ────────────────────────────────────────
+        drawPhoneIcon(dc, S(182, scale), S(56, scale), scale, engine.phoneConnected);
+        drawHeartIcon(dc, S(234, scale), S(56, scale), scale, engine.chestStatus >= 1);
 
         // ── R2  Distanz (done/total) | Reserve % ─────────────────────────
+        // y=126 is not free choice: the progress arc's end caps sit at y=104,
+        // so anything higher runs into the scale at the left and right edges.
         var distTxt = formatDistance(paceLogic.distanceKm) + "/" +
                       config.raceDistanceKm.toNumber().format("%d");
-        lbl(dc, S(122, scale), S(132, scale), distTxt,
-            Graphics.FONT_MEDIUM, COLOR_WHITE);
-        lbl(dc, S(294, scale), S(132, scale),
-            formatReserve(reserveLogic.reservePercent), Graphics.FONT_MEDIUM,
+        lbl(dc, S(142, scale), S(126, scale), distTxt,
+            Graphics.FONT_SMALL, COLOR_WHITE);
+        lbl(dc, S(278, scale), S(126, scale),
+            formatReserve(reserveLogic.reservePercent), Graphics.FONT_SMALL,
             colorForReserve(reserveLogic.reservePercent));
 
-        // ── R3  Ø-Pace | CURRENT PACE (hero tile) | Delta ────────────────
-        // Pace module: whole-race average (left) · current pace (hero) ·
-        // instant delta to target (right).
-        var p1cy = S(200, scale);
-        var p1w  = S(146, scale);
-        var p1h  = S(66,  scale);
-        drawPanel(dc, cx, p1cy, p1w, p1h, S(12, scale), COLOR_PANEL_CENTER);
-
-        lbl(dc, S(84, scale), p1cy,
-            formatPace(paceLogic.averagePaceSec), Graphics.FONT_MEDIUM,
-            colorForMeasuredPace(paceLogic.averagePaceSec));
-
-        lbl(dc, S(332, scale), p1cy,
-            formatSignedPaceDelta(paceLogic.deltaToTargetSec()), Graphics.FONT_MEDIUM,
-            colorForDelta(paceLogic.deltaToTargetSec()));
-
-        drawPacePanel(dc, cx, p1cy, p1w, p1h, scale);
+        // ── R3  HERO current pace ────────────────────────────────────────
+        drawPacePanel(dc, cx, S(208, scale), S(280, scale), S(116, scale), scale);
 
         // ── R4  Elapsed | Finish ─────────────────────────────────────────
-        var elapsed = formatTimeHms(paceLogic.elapsedSec);
-        var finish  = formatTimeHms(paceLogic.projectedFinishSec);
-        lbl(dc, S(112, scale), S(262, scale), elapsed,
-            Graphics.FONT_MEDIUM, COLOR_WHITE);
-        lbl(dc, S(304, scale), S(262, scale), finish,
-            Graphics.FONT_MEDIUM, colorForProjectedFinish());
+        lbl(dc, S(150, scale), S(297, scale), formatTimeHms(paceLogic.elapsedSec),
+            Graphics.FONT_SMALL, COLOR_WHITE);
+        lbl(dc, S(282, scale), S(297, scale),
+            formatTimeHm(paceLogic.projectedFinishSec),
+            Graphics.FONT_SMALL, colorForProjectedFinish());
 
-        // ── R5  HR module: current HR (big) + drift trend arrow above ────
-        // The small line reads currentHr against its 5-min average: a native
-        // triangle (no font glyph) + the bpm delta.  Rising = you are drifting
-        // up / possibly over-pacing (orange, red once real HR-vs-pace
-        // decoupling is detected), flat = calm, falling = recovering.
-        drawHrTrend(dc, cx, S(312, scale), scale);
-
-        var hrTxt = formatHeartRateNumber(hrLogic.currentHr);
-        lbl(dc, cx, S(352, scale), hrTxt,
-            pickEmphasisFont(dc, hrTxt, S(140, scale)),
-            colorForHrValue(hrLogic.currentHr.toFloat()));
+        // ── R5  HR module: current HR (big) + drift trend arrow beside ───
+        drawHrBlock(dc, cx, S(352, scale), scale);
         } catch (ex) {
             // A draw failure must never freeze the field; the background is
             // already cleared, so we simply skip the rest of this frame.
@@ -305,37 +185,49 @@ class Running_RaceView extends WatchUi.DataField {
     }
 
     // =========================================================================
-    // Feld 1 – pace drawn on the center panel
+    // The hero tile: current pace as large as the panel allows, with either the
+    // whole-race average pace or an active banner on the line underneath.
     // =========================================================================
     function drawPacePanel(dc as Dc, cx as Number, cy as Number,
                            panelW as Number, panelH as Number,
                            scale as Float) as Void {
 
-        var paceTxt   = formatPace(paceLogic.smoothedPaceSec);
-        var paceColor = colorForPace(paceLogic.smoothedPaceSec);
+        drawPanel(dc, cx, cy, panelW, panelH, S(14, scale), COLOR_PANEL_CENTER);
 
-        var hdrTxt   = "";
-        var hdrColor = COLOR_WHITE;
+        // heroH is a font-selection budget, not a drawing box, and it is larger
+        // than the tile can visually hold on purpose: a Garmin number font's
+        // line box is roughly twice its digit height (FONT_NUMBER_HOT measures
+        // 112 px here but only inks ~52), and getTextDimensions can only report
+        // the line box.  Sizing the tile to the line box left 37 px of dead air
+        // above and below the digits.  The tile now wraps the *ink*, so if you
+        // change heroH or the fonts, re-check with `.\run.ps1 -Preview`.
+        var paceTxt = formatPace(paceLogic.smoothedPaceSec);
+        var heroY   = cy - S(18, scale);
+        var heroW   = panelW - S(24, scale);
+        var heroH   = S(112, scale);
+        lbl(dc, cx, heroY, paceTxt,
+            pickHeroFont(dc, paceTxt, heroW, heroH),
+            colorForPace(paceLogic.smoothedPaceSec));
+
+        // Sub-line: Ø-pace for the whole race and L-pace for the kilometre you
+        // are in — the two references the hero number is worth reading against.
+        // A live banner or an active HR drift outranks both while it is up.
+        var subY = cy + S(34, scale);
         if (alertLogic.hasActiveBanner(paceLogic.elapsedSec)) {
-            hdrTxt   = alertLogic.bannerText;
-            hdrColor = alertLogic.bannerColor as Number;
+            lbl(dc, cx, subY, alertLogic.bannerText, Graphics.FONT_XTINY,
+                alertLogic.bannerColor as Number);
         } else if (hrLogic.driftActive) {
-            hdrTxt   = "DRIFT +" + hrLogic.driftDeltaBpm.format("%d");
-            hdrColor = COLOR_ORANGE;
-        }
-
-        if (!hdrTxt.equals("")) {
-            // Header + pace must share the panel's height, so drop the pace to
-            // a MEDIUM (non-number) font that fits under the header without
-            // spilling past the rounded corners.
-            lbl(dc, cx, cy - (panelH / 2) + S(12, scale),
-                hdrTxt, Graphics.FONT_XTINY, hdrColor);
-            lbl(dc, cx, cy + S(9, scale),
-                paceTxt, Graphics.FONT_MEDIUM, paceColor);
+            lbl(dc, cx, subY, "DRIFT +" + hrLogic.driftDeltaBpm.format("%d"),
+                Graphics.FONT_XTINY, COLOR_ORANGE);
         } else {
-            lbl(dc, cx, cy,
-                paceTxt, pickCenterFont(dc, paceTxt, panelW - S(16, scale)),
-                paceColor);
+            // Two labels rather than one string: each keeps its own colour, and
+            // both slots stay put when one of them has no reading.
+            var avgPace = paceLogic.averagePaceSec;
+            var lapPace = paceLogic.lapPaceSec();
+            lbl(dc, cx - S(46, scale), subY, "Ø " + formatPace(avgPace),
+                Graphics.FONT_XTINY, colorForMeasuredPace(avgPace));
+            lbl(dc, cx + S(46, scale), subY, "L " + formatPace(lapPace),
+                Graphics.FONT_XTINY, colorForMeasuredPace(lapPace));
         }
     }
 
@@ -372,29 +264,68 @@ class Running_RaceView extends WatchUi.DataField {
         ]);
     }
 
+    // Current HR (big) with the drift trend on the same baseline beside it.
+    // Side by side rather than stacked: this row sits low on the round face
+    // where the circle has already closed in, so a second line underneath it
+    // would either collide with the HR arc or have to shrink to nothing.
+    // The pair is measured and then centred as one group.
+    function drawHrBlock(dc as Dc, cx as Number, cy as Number,
+                         scale as Float) as Void {
+        var hrTxt = formatHeartRateNumber(hrLogic.currentHr);
+        var font  = pickEmphasisFont(dc, hrTxt, S(110, scale));
+        var numW  = textWidth(dc, hrTxt, font);
+
+        var trendW = hrTrendWidth(dc, scale);
+        var gap    = trendW > 0 ? S(12, scale) : 0;
+        var left   = cx - ((numW + gap + trendW) / 2);
+
+        lbl(dc, left + (numW / 2), cy, hrTxt, font,
+            colorForHrValue(hrLogic.currentHr.toFloat()));
+        if (trendW > 0) {
+            drawHrTrend(dc, left + numW + gap + (trendW / 2), cy, trendW, scale);
+        }
+    }
+
     // HR drift trend: current HR relative to its own 5-min average, drawn as a
     // native triangle (up / down) or a dash (flat) plus the bpm delta — no font
     // glyph, so it can never render as garbage.  Colour escalates from calm
     // (flat) to orange (rising) to red once RaceHeartRateLogic detects real
     // HR-vs-pace decoupling, i.e. genuine over-pacing.
+    function hasHrTrend() as Boolean {
+        return hrLogic.currentHr > 0 && hrLogic.rolling5MinHr > 0.0;
+    }
+
+    function hrTrendDeltaBpm() as Number {
+        return roundNumber(hrLogic.currentHr.toFloat() - hrLogic.rolling5MinHr);
+    }
+
+    // -1 falling · 0 flat · +1 rising
+    function hrTrendDirection() as Number {
+        var d = hrTrendDeltaBpm();
+        if (d >=  3) { return  1; }
+        if (d <= -3) { return -1; }
+        return 0;
+    }
+
+    // 0 means "nothing to draw", which also switches off the gap in drawHrBlock.
+    function hrTrendWidth(dc as Dc, scale as Float) as Number {
+        if (!hasHrTrend()) { return 0; }
+        var hw = S(6, scale);
+        if (hrTrendDirection() == 0) { return 2 * hw; }
+        var d = hrTrendDeltaBpm();
+        return (2 * hw) + S(5, scale) +
+               textWidth(dc, (d < 0 ? -d : d).format("%d"), Graphics.FONT_TINY);
+    }
+
     function drawHrTrend(dc as Dc, cx as Number, cy as Number,
-                         scale as Float) as Void {
-        var cur  = hrLogic.currentHr;
-        var base = hrLogic.rolling5MinHr;
-        if (cur <= 0 || base <= 0.0) { return; }   // not enough data yet
-
-        var d   = roundNumber(cur.toFloat() - base);
-        var dir = 0;                               // -1 falling, 0 flat, +1 rising
-        if (d >=  3) { dir =  1; }
-        if (d <= -3) { dir = -1; }
-
+                         totalW as Number, scale as Float) as Void {
+        var dir   = hrTrendDirection();
         var color = COLOR_MUTED;                   // flat = calm
         if (dir > 0) { color = hrLogic.driftActive ? COLOR_RED : COLOR_ORANGE; }
         if (dir < 0) { color = COLOR_GREEN; }
 
-        var hw  = S(6, scale);                     // triangle half-width
-        var hh  = S(9, scale);                     // triangle height
-        var gap = S(6, scale);
+        var hw = S(6, scale);                      // triangle half-width
+        var hh = S(9, scale);                      // triangle height
 
         dc.setColor(color, Graphics.COLOR_TRANSPARENT);
         if (dir == 0) {
@@ -403,12 +334,8 @@ class Running_RaceView extends WatchUi.DataField {
             return;
         }
 
-        var numTxt = (d < 0 ? -d : d).format("%d");
-        var numW   = textWidth(dc, numTxt, Graphics.FONT_SMALL);
-        var total  = (2 * hw) + gap + numW;
-        var left   = cx - (total / 2);
-        var gx     = left + hw;                    // triangle centre x
-
+        var left = cx - (totalW / 2);
+        var gx   = left + hw;                      // triangle centre x
         if (dir > 0) {
             dc.fillPolygon([
                 [gx,      cy - (hh / 2)],
@@ -422,7 +349,10 @@ class Running_RaceView extends WatchUi.DataField {
                 [gx + hw, cy - (hh / 2)]
             ]);
         }
-        dc.drawText(left + (2 * hw) + gap, cy, Graphics.FONT_SMALL, numTxt,
+
+        var d = hrTrendDeltaBpm();
+        dc.drawText(left + (2 * hw) + S(5, scale), cy, Graphics.FONT_TINY,
+                    (d < 0 ? -d : d).format("%d"),
                     Graphics.TEXT_JUSTIFY_LEFT | Graphics.TEXT_JUSTIFY_VCENTER);
     }
 
@@ -436,21 +366,45 @@ class Running_RaceView extends WatchUi.DataField {
         dc.drawCircle(cx, cy, r - 1);
     }
 
+    // Race progress, filling left to right across the top of the face.  This
+    // is the counterweight to the HR arc at the bottom, and it is a bar rather
+    // than another number on purpose: "how far through the race am I" is a
+    // gestalt question, the exact kilometre is already on R2.  Blue keeps it
+    // out of the green/orange/red status axis the pace owns.
+    function drawProgressArc(dc as Dc, cx as Number, cy as Number,
+                             r as Number, thickness as Number,
+                             startDeg as Float, endDeg as Float,
+                             progress as Float) as Void {
+        drawNativeArc(dc, cx, cy, r, thickness, startDeg, endDeg, 0.0, COLOR_TRACK);
+        if (progress <= 0.0) { return; }
+        if (progress > 1.0)  { progress = 1.0; }
+        drawNativeArc(dc, cx, cy, r, thickness, startDeg,
+                      startDeg + (progress * (endDeg - startDeg)), 0.0, COLOR_BLUE);
+        dc.setPenWidth(1);
+    }
+
+    // Zone bar over [minVal .. last threshold] rather than [0 .. last]: zooming
+    // the scale to the range actually used while racing makes a 10 bpm move
+    // visible instead of a hair's width.  Zones entirely below minVal are
+    // folded into the first visible segment.
     function drawZoneArc(dc as Dc, cx as Number, cy as Number,
                          r as Number, thickness as Number,
                          startDeg as Float, endDeg as Float,
                          thresholds as Array<Number>,
-                         currentValue as Number) as Void {
+                         currentValue as Number,
+                         minVal as Float) as Void {
         if (thresholds == null || thresholds.size() <= 0) { return; }
         var maxVal = (thresholds[thresholds.size() - 1] as Number).toFloat();
-        if (maxVal <= 0.0) { return; }
+        var span   = maxVal - minVal;
+        if (span <= 0.0) { return; }
 
         drawNativeArc(dc, cx, cy, r, thickness, startDeg, endDeg, 0.0, COLOR_TRACK);
-        var prev = 0.0;
+        var prev = minVal;
         for (var i = 0; i < thresholds.size(); i += 1) {
-            var thr  = (thresholds[i] as Number).toFloat();
-            var sAng = startDeg + ((prev / maxVal) * (endDeg - startDeg));
-            var eAng = startDeg + ((thr  / maxVal) * (endDeg - startDeg));
+            var thr = (thresholds[i] as Number).toFloat();
+            if (thr <= minVal) { continue; }     // zone sits below the zoom floor
+            var sAng = startDeg + (((prev - minVal) / span) * (endDeg - startDeg));
+            var eAng = startDeg + (((thr  - minVal) / span) * (endDeg - startDeg));
             drawNativeArc(dc, cx, cy, r, thickness, sAng, eAng, 2.6,
                           colorForZoneIndex(i + 1));
             prev = thr;
@@ -458,8 +412,9 @@ class Running_RaceView extends WatchUi.DataField {
         dc.setPenWidth(1);
         if (currentValue > 0) {
             var capped = currentValue.toFloat();
+            if (capped < minVal) { capped = minVal; }
             if (capped > maxVal) { capped = maxVal; }
-            var mDeg = startDeg + ((capped / maxVal) * (endDeg - startDeg));
+            var mDeg = startDeg + (((capped - minVal) / span) * (endDeg - startDeg));
             drawArcMarker(dc, cx, cy, r, thickness - 1, mDeg);
         }
     }
@@ -519,14 +474,20 @@ class Running_RaceView extends WatchUi.DataField {
     // GUARD: FONT_NUMBER_* support only "0-9 : . , %" – no dash "-".
     // "--:--" passed to FONT_NUMBER renders as garbage (crossed-dot glyphs).
     // Only use number fonts when the string is a real mm:ss pace value.
-    function pickCenterFont(dc as Dc, text as String, maxW as Number) {
-        var isRealPace = !text.equals("--:--");
-        if (isRealPace) {
-            if (textWidth(dc, text, Graphics.FONT_NUMBER_MEDIUM) <= maxW) { return Graphics.FONT_NUMBER_MEDIUM; }
-            if (textWidth(dc, text, Graphics.FONT_NUMBER_MILD)   <= maxW) { return Graphics.FONT_NUMBER_MILD;   }
+    //
+    // The hero pace is the whole point of the face, so this picks the largest
+    // font that fits the tile in BOTH axes – height matters here, the number
+    // fonts are tall enough to spill out of the panel on width alone.
+    function pickHeroFont(dc as Dc, text as String,
+                          maxW as Number, maxH as Number) {
+        if (!text.equals("--:--")) {
+            if (fits(dc, text, Graphics.FONT_NUMBER_THAI_HOT, maxW, maxH)) { return Graphics.FONT_NUMBER_THAI_HOT; }
+            if (fits(dc, text, Graphics.FONT_NUMBER_HOT,      maxW, maxH)) { return Graphics.FONT_NUMBER_HOT;      }
+            if (fits(dc, text, Graphics.FONT_NUMBER_MEDIUM,   maxW, maxH)) { return Graphics.FONT_NUMBER_MEDIUM;   }
+            if (fits(dc, text, Graphics.FONT_NUMBER_MILD,     maxW, maxH)) { return Graphics.FONT_NUMBER_MILD;     }
         }
-        if (textWidth(dc, text, Graphics.FONT_LARGE)  <= maxW) { return Graphics.FONT_LARGE;  }
-        if (textWidth(dc, text, Graphics.FONT_MEDIUM) <= maxW) { return Graphics.FONT_MEDIUM; }
+        if (fits(dc, text, Graphics.FONT_LARGE,  maxW, maxH)) { return Graphics.FONT_LARGE;  }
+        if (fits(dc, text, Graphics.FONT_MEDIUM, maxW, maxH)) { return Graphics.FONT_MEDIUM; }
         return Graphics.FONT_SMALL;
     }
 
@@ -534,6 +495,13 @@ class Running_RaceView extends WatchUi.DataField {
         if (textWidth(dc, text, Graphics.FONT_LARGE)  <= maxW) { return Graphics.FONT_LARGE;  }
         if (textWidth(dc, text, Graphics.FONT_MEDIUM) <= maxW) { return Graphics.FONT_MEDIUM; }
         return Graphics.FONT_SMALL;
+    }
+
+    function fits(dc as Dc, text as String, font,
+                  maxW as Number, maxH as Number) as Boolean {
+        var dims = dc.getTextDimensions(text, font);
+        if (dims == null || dims.size() < 2) { return false; }
+        return ((dims[0] as Number) <= maxW) && ((dims[1] as Number) <= maxH);
     }
 
     function textWidth(dc as Dc, text as String, font) as Number {
@@ -544,23 +512,22 @@ class Running_RaceView extends WatchUi.DataField {
     // =========================================================================
     // Colour selectors
     // =========================================================================
-    // Hero current pace: green when within tolerance of target, red otherwise.
+    // Hero current pace — the only target comparison left on the face now that
+    // the separate delta field is gone, so it carries all three states:
+    //   green = inside tolerance · orange = too fast · red = too slow.
     function colorForPace(paceSeconds as Float) as Number {
-        if (paceSeconds <= 0.0) { return COLOR_WHITE; }
-        return absoluteFloat(paceSeconds - config.targetPaceSec)
-               <= config.paceToleranceSec ? COLOR_GREEN : COLOR_RED;
+        if (!(paceSeconds > 0.0) || paceSeconds > 1200.0) { return COLOR_MUTED; }
+        var status = paceLogic.paceStatus(paceSeconds);
+        if (status <  0) { return COLOR_ORANGE; }
+        if (status >  0) { return COLOR_RED;    }
+        return COLOR_GREEN;
     }
 
-    // Neutral colour for a measured pace readout (avg / rolling): white when we
+    // Neutral colour for a measured pace readout (the Ø line): white when we
     // have a value, muted when we don't.  Deviation colour is reserved for the
-    // hero current-pace and the delta so the eye has a single status axis.
+    // hero current pace so the eye has a single status axis.
     function colorForMeasuredPace(paceSeconds as Float) as Number {
         return (paceSeconds > 0.0 && paceSeconds <= 1200.0) ? COLOR_WHITE : COLOR_MUTED;
-    }
-
-    function colorForDelta(deltaSeconds as Float) as Number {
-        if (absoluteFloat(deltaSeconds) <= 1.5) { return COLOR_WHITE; }
-        return deltaSeconds < 0.0 ? COLOR_GREEN : COLOR_RED;
     }
 
     function colorForProjectedFinish() as Number {
@@ -568,29 +535,13 @@ class Running_RaceView extends WatchUi.DataField {
         return paceLogic.projectedFinishSec <= config.targetTimeSec ? COLOR_GREEN : COLOR_RED;
     }
 
-    // Effort metrics (power / HR) are tinted by training zone, so the number
-    // matches its own arc segment and effort reads at a glance:
-    //   z1 muted · z2 blue · z3 green · z4 orange · z5 red.
-    function colorForPower(value as Number, available as Boolean) as Number {
-        if (!available || value <= 0) { return COLOR_MUTED; }
-        return colorForZoneIndex(
-            zoneIndexForValue(value, config.powerZones as Array<Number>));
-    }
-
-    // Cadence (used for the top slot when no power meter is present) is tinted
-    // by its own zone thresholds, same scale as power/HR.
-    function colorForCadence(value as Number, available as Boolean) as Number {
-        if (!available || value <= 0) { return COLOR_MUTED; }
-        return colorForZoneIndex(
-            zoneIndexForValue(value, config.cadenceZones as Array<Number>));
-    }
-
     // Reserve is neutral until it runs low, then a single red warning.
     function colorForReserve(value as Number) as Number {
         return value < 40 ? COLOR_RED : COLOR_WHITE;
     }
 
-    // HR numbers tinted by training zone (matches the HR arc segments).
+    // HR numbers tinted by training zone (matches the HR arc segments):
+    //   z1 muted · z2 blue · z3 green · z4 orange · z5 red.
     function colorForHrValue(value as Float) as Number {
         if (value <= 0.0) { return COLOR_MUTED; }
         return colorForZoneIndex(
@@ -622,16 +573,9 @@ class Running_RaceView extends WatchUi.DataField {
     }
 
     function formatPace(paceSeconds as Float) as String {
-        if (paceSeconds <= 0.0 || paceSeconds > 1200.0) { return "--:--"; }
+        if (!(paceSeconds > 0.0) || paceSeconds > 1200.0) { return "--:--"; }
         var r = roundNumber(paceSeconds);
         return (r / 60).format("%d") + ":" + (r % 60).format("%02d");
-    }
-
-    function formatSignedPaceDelta(deltaSeconds as Float) as String {
-        var prefix = "+";
-        if (deltaSeconds < 0.0) { prefix = "-"; deltaSeconds = -deltaSeconds; }
-        var r = roundNumber(deltaSeconds);
-        return prefix + (r / 60).format("%d") + ":" + (r % 60).format("%02d");
     }
 
     function formatTimeHms(totalSeconds as Number) as String {
@@ -642,13 +586,16 @@ class Running_RaceView extends WatchUi.DataField {
         return hh.format("%d") + ":" + mm.format("%02d") + ":" + ss.format("%02d");
     }
 
-    function formatPower(value as Number, available as Boolean) as String {
-        return (!available || value <= 0) ? "--" : value.format("%d");
+    // h:mm, rounded to the nearest minute — used for the projected finish,
+    // which is re-estimated every 10 s and has no meaningful second digit.
+    function formatTimeHm(totalSeconds as Number) as String {
+        if (totalSeconds < 0) { totalSeconds = 0; }
+        var minutes = (totalSeconds + 30) / 60;
+        return (minutes / 60).format("%d") + ":" + (minutes % 60).format("%02d");
     }
-    function formatCadence(value as Number, available as Boolean) as String {
-        return (!available || value <= 0) ? "--" : value.format("%d");
-    }
+
     function formatReserve(value as Number) as String   { return value.format("%d") + "%"; }
+
     function formatHeartRateNumber(value) as String {
         if (value == null || value <= 0) { return "--"; }
         return roundNumber(value).format("%d");

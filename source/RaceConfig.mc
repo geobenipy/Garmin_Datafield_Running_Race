@@ -1,4 +1,3 @@
-import Toybox.Activity;
 import Toybox.Application;
 import Toybox.Lang;
 import Toybox.UserProfile;
@@ -22,6 +21,12 @@ class RaceConfig {
     const BANNER_SHORT_SEC      = 12;
     const BANNER_LONG_SEC       = 25;
 
+    // Bounds for HR zone thresholds read from app properties.  sanitizeThresholds
+    // only enforces that they increase, not that they are plausible bpm — a junk
+    // value would otherwise set the whole HR arc's scale.
+    const MIN_HR_BPM = 40;
+    const MAX_HR_BPM = 240;
+
     var targetPaceSec       = 300.0;
     var targetTimeSec       = 12600;
     var paceToleranceSec    = 10.0;
@@ -41,17 +46,17 @@ class RaceConfig {
     var nutritionAlerts = [8000, 18000, 30000, 38000] as Array<Number>;
 
     var hrZones            = [114, 133, 152, 171, 190] as Array<Number>;
-    var powerZones         = [220, 250, 280, 310, 340] as Array<Number>;
-    var cadenceZones       = [160, 168, 180, 188]      as Array<Number>;
 
     function initialize() {
         load();
     }
 
     function load() as Void {
-        targetPaceSec    = readInt("targetPaceSecPerKm", 300).toFloat();
-        paceToleranceSec = readInt("paceToleranceSec",   10).toFloat();
-        nutritionStartDelaySec = readInt("nutritionStartDelaySec", 900);
+        // Clamped, because a corrupt or out-of-range setting must not be able to
+        // poison every pace comparison and projection for the whole race.
+        targetPaceSec    = clampInt(readInt("targetPaceSecPerKm", 300), 120, 900).toFloat();
+        paceToleranceSec = clampInt(readInt("paceToleranceSec",   10),    1, 120).toFloat();
+        nutritionStartDelaySec = clampInt(readInt("nutritionStartDelaySec", 900), 0, 7200);
 
         // 0 = 10 km, 1 = Half marathon, 2 = Marathon
         var distCode = readInt("targetDistanceCode", 2);
@@ -64,7 +69,7 @@ class RaceConfig {
         }
 
         var defaultTime = roundNumber(targetPaceSec * raceDistanceKm);
-        targetTimeSec   = readInt("targetTime", defaultTime);
+        targetTimeSec   = clampInt(readInt("targetTime", defaultTime), 600, 86400);
 
         nutritionAlerts = [
             normalizeFuel(readInt("nutritionAlarm1", 8000)),
@@ -74,7 +79,6 @@ class RaceConfig {
         ] as Array<Number>;
 
         loadHrZones();
-        loadPowerZones();
     }
 
     // -----------------------------------------------------------------------
@@ -111,33 +115,34 @@ class RaceConfig {
 
         if (!loaded) {
             hrZones = [
-                readInt("hrZone1", 114),
-                readInt("hrZone2", 133),
-                readInt("hrZone3", 152),
-                readInt("hrZone4", 171),
-                readInt("hrZone5", 190)
+                clampInt(readInt("hrZone1", 114), MIN_HR_BPM, MAX_HR_BPM),
+                clampInt(readInt("hrZone2", 133), MIN_HR_BPM, MAX_HR_BPM),
+                clampInt(readInt("hrZone3", 152), MIN_HR_BPM, MAX_HR_BPM),
+                clampInt(readInt("hrZone4", 171), MIN_HR_BPM, MAX_HR_BPM),
+                clampInt(readInt("hrZone5", 190), MIN_HR_BPM, MAX_HR_BPM)
             ] as Array<Number>;
             sanitizeThresholds(hrZones);
         }
     }
 
-    // Power zones – getPowerZones() correctly uses Activity.Sport
-    function loadPowerZones() as Void {
+    // A settings sync can leave a key missing or holding a non-Number, and
+    // getValue() itself throws on some firmware for an unknown key.  Either
+    // must fall back to the default rather than take the field down.
+    function readInt(key as String, fallback as Number) as Number {
         try {
-            var zones = UserProfile.getPowerZones(
-                Activity.SPORT_RUNNING) as Array<Number> or Null;
-            if (zones != null && zones.size() > 1) {
-                powerZones = zones;
-                sanitizeThresholds(powerZones);
-            }
+            var value = Application.Properties.getValue(key);
+            if (value instanceof Lang.Number) { return value; }
+            if (value instanceof Lang.Float)  { return value.toNumber(); }
         } catch (e) {
-            // keep defaults
+            // fall through to the default
         }
+        return fallback;
     }
 
-    function readInt(key as String, fallback as Number) as Number {
-        var value = Application.Properties.getValue(key) as Number or Null;
-        return value != null ? value : fallback;
+    function clampInt(value as Number, low as Number, high as Number) as Number {
+        if (value < low)  { return low;  }
+        if (value > high) { return high; }
+        return value;
     }
 
     function normalizeFuel(raw as Number) as Number {

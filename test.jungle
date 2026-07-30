@@ -1,0 +1,14 @@
+# Test build: the release jungle plus the test/ folder.
+#
+# Kept separate from monkey.jungle on purpose — the simulation harness in
+# test/ is ordinary (un-annotated) Monkey C, so anything that pulls it in
+# would also ship it.  Release builds never see this file.
+#
+#   monkeyc -f test.jungle -o bin\Running_Race_test.prg -y <key> \
+#           -d fenix843mm -w --unit-test
+#   monkeydo bin\Running_Race_test.prg fenix843mm /t
+#
+# or simply:  .\run.ps1 -Test
+
+project.manifest = manifest.xml
+base.sourcePath = source;test

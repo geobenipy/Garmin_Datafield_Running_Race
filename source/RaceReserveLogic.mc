@@ -46,6 +46,8 @@ class RaceReserveLogic {
         if (paceLogic.distanceKm >= config.raceDistanceKm) {
             reservePercent = 0;
         }
+        // The readout is a percentage; keep it one even if an input drifts.
+        reservePercent = roundNumber(clamp(reservePercent.toFloat(), 0.0, 100.0));
 
         lastComputedSec = paceLogic.elapsedSec;
     }

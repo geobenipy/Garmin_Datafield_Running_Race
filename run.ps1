@@ -6,11 +6,18 @@
         .\run.ps1                    # build + launch on fenix843mm
         .\run.ps1 -Device fr965      # build + launch on a different device
         .\run.ps1 -BuildOnly         # compile only, do not open the simulator
+        .\run.ps1 -Test              # build + run the unit tests, fail on error
         .\run.ps1 -Shot              # build + launch + save a PNG screenshot
         .\run.ps1 -Shot -ShotPath x  # ...write the screenshot to path x
 
     -Shot captures the simulator window to bin\sim_shot.png (gitignored) so the
     rendered result can be inspected without a manual screenshot.
+
+    -Test builds test.jungle with --unit-test and runs the suite in test\ via
+    monkeydo /t.  It exits non-zero when a test fails, so it can gate a commit.
+    The marathon test simulates the full race distance and takes a minute or
+    two — that is the point, the crash it guards against only appears after the
+    sample buffers fill up.
 
     Works even if the SDK bin folder is not on your PATH: it falls back to the
     SDK the Connect IQ SDK Manager currently points at.
@@ -22,6 +29,7 @@ param(
     [string]$Out       = "bin\Running_Race.prg",
     [string]$Jungle    = "monkey.jungle",
     [switch]$BuildOnly,
+    [switch]$Test,
     [switch]$Shot,
     [switch]$Preview,
     [string]$ShotPath  = "bin\sim_shot.png"
@@ -124,12 +132,55 @@ $monkeydo  = Join-Path $bin "monkeydo.bat"
 
 Write-Host "SDK bin : $bin" -ForegroundColor DarkGray
 
-# --- Compile ------------------------------------------------------------------
+# --- Make sure the simulator is running --------------------------------------
+function Start-Simulator {
+    if (-not (Get-Process -Name simulator -ErrorAction SilentlyContinue)) {
+        Write-Host "Starting Connect IQ simulator ..." -ForegroundColor Cyan
+        Start-Process -FilePath $connectiq
+        for ($i = 0; $i -lt 30 -and -not (Get-Process -Name simulator -ErrorAction SilentlyContinue); $i++) {
+            Start-Sleep -Milliseconds 500
+        }
+        Start-Sleep -Seconds 2
+    } else {
+        Write-Host "Simulator already running." -ForegroundColor DarkGray
+    }
+}
+
 if (-not (Test-Path $Key)) { throw "Signing key not found: $Key" }
 $outDir = Split-Path $Out
 if ($outDir -and -not (Test-Path $outDir)) {
     New-Item -ItemType Directory -Force -Path $outDir | Out-Null
 }
+
+# --- Unit tests ---------------------------------------------------------------
+# Run No Evil only works inside the simulator, so this needs it running too.
+if ($Test) {
+    $testOut = Join-Path $outDir "Running_Race_test.prg"
+    Write-Host "Building unit tests ($testOut) for $Device ..." -ForegroundColor Cyan
+    & $monkeyc -f "test.jungle" -o $testOut -y $Key -d $Device -w --unit-test
+    if ($LASTEXITCODE -ne 0) { throw "Test build failed (exit $LASTEXITCODE)." }
+
+    Start-Simulator
+
+    Write-Host "Running tests (the marathon test takes a while) ..." -ForegroundColor Cyan
+    $log = & $monkeydo $testOut $Device /t
+    $log | ForEach-Object { Write-Host $_ }
+
+    # Run No Evil always exits 0, so the verdict has to come out of its summary
+    # line ("PASSED (passed=11, failed=0, errors=0)").  Insisting on a non-zero
+    # test count as well means a suite that silently stopped being built counts
+    # as a failure rather than a pass.
+    $text = ($log -join "`n")
+    if (($text -notmatch 'Ran [1-9]\d* test') -or
+        ($text -notmatch 'PASSED \(') -or
+        ($text -match '(failed|failures|errors)=[1-9]')) {
+        throw "Unit tests did not pass. See the output above."
+    }
+    Write-Host "All tests passed." -ForegroundColor Green
+    return
+}
+
+# --- Compile ------------------------------------------------------------------
 
 Write-Host "Building $Out for $Device ..." -ForegroundColor Cyan
 & $monkeyc -f $Jungle -o $Out -y $Key -d $Device -w
@@ -138,17 +189,7 @@ Write-Host "Build OK." -ForegroundColor Green
 
 if ($BuildOnly) { return }
 
-# --- Make sure the simulator is running --------------------------------------
-if (-not (Get-Process -Name simulator -ErrorAction SilentlyContinue)) {
-    Write-Host "Starting Connect IQ simulator ..." -ForegroundColor Cyan
-    Start-Process -FilePath $connectiq
-    for ($i = 0; $i -lt 30 -and -not (Get-Process -Name simulator -ErrorAction SilentlyContinue); $i++) {
-        Start-Sleep -Milliseconds 500
-    }
-    Start-Sleep -Seconds 2
-} else {
-    Write-Host "Simulator already running." -ForegroundColor DarkGray
-}
+Start-Simulator
 
 # --- Load the app into the simulator -----------------------------------------
 Write-Host "Loading app into simulator ..." -ForegroundColor Cyan
