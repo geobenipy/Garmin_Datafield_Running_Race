@@ -1,3 +1,4 @@
+import Toybox.Graphics;
 import Toybox.Lang;
 import Toybox.System;
 import Toybox.Test;
@@ -378,8 +379,11 @@ function testConfigClampsHostileSettings(logger as Test.Logger) as Boolean {
         "target pace out of range: " + cfg.targetPaceSec);
     Test.assertMessage(cfg.paceToleranceSec >= 1.0 && cfg.paceToleranceSec <= 120.0,
         "pace tolerance out of range: " + cfg.paceToleranceSec);
-    Test.assertMessage(cfg.targetTimeSec >= 600 && cfg.targetTimeSec <= 86400,
+    Test.assertMessage(cfg.targetTimeSec >= RaceSetup.MIN_TIME_SEC &&
+                       cfg.targetTimeSec <= RaceSetup.MAX_TIME_SEC,
         "target time out of range: " + cfg.targetTimeSec);
+    Test.assertMessage(cfg.raceDistanceKm >= 0.5 && cfg.raceDistanceKm <= 200.0,
+        "race distance out of range: " + cfg.raceDistanceKm);
     Test.assertEqualMessage(cfg.readInt("no_such_property_at_all", 42), 42,
         "an unknown property must fall back to its default");
 
@@ -390,4 +394,240 @@ function testConfigClampsHostileSettings(logger as Test.Logger) as Boolean {
             "HR zone thresholds are not strictly increasing at index " + i);
     }
     return true;
+}
+
+// === 6. the race distance and the target it implies ========================
+
+// The distance readout counts down: 0.0/42.2 on the start line, 10.0/32.2 at
+// ten kilometres, and never past zero however far the GPS overshoots.  This is
+// what the face's R2 row prints, so it is worth pinning directly.
+(:test)
+function testRemainingDistanceCountsDown(logger as Test.Logger) as Boolean {
+    var sim  = new RaceSim();
+    var e    = sim.engine;
+    var pace = e.paceLogic;
+
+    e.tick(1, 0.0, null, null, 150, null, 0.0);
+    Test.assertMessage(nearly(pace.remainingKm, 42.195),
+        "a race that has not started must have all of it left: " + pace.remainingKm);
+
+    e.tick(2, 10.0, 3.33, 3.33, 150, null, 0.0);
+    Test.assertMessage(nearly(pace.remainingKm, 32.195),
+        "10 km into a marathon must leave 32.195 km: " + pace.remainingKm);
+
+    e.tick(3, 21.0975, 3.33, 3.33, 150, null, 0.0);
+    Test.assertMessage(nearly(pace.remainingKm, 21.0975),
+        "halfway must leave half: " + pace.remainingKm);
+
+    e.tick(4, 45.0, 3.33, 3.33, 150, null, 0.0);
+    Test.assertEqualMessage(pace.remainingKm, 0.0,
+        "overshooting the finish must not count backwards: " + pace.remainingKm);
+    return true;
+}
+
+// A loaded route outranks the configured distance — and not just for the
+// remaining-distance readout: the progress arc, the reserve drain and the goal
+// time all have to move onto the course's real length with it.
+(:test)
+function testALoadedCourseSetsTheRaceDistance(logger as Test.Logger) as Boolean {
+    var sim  = new RaceSim();
+    var e    = sim.engine;
+    var pace = e.paceLogic;
+
+    // 12 km done with 30.4 km of route ahead: a 42.4 km course, not the
+    // 42.195 km configured.
+    e.tick(3600, 12.0, 3.33, 3.33, 150, null, 30.4);
+    logger.debug("course length " + pace.effectiveRaceDistanceKm() +
+                 " km, target " + pace.effectiveTargetTimeSec() + " s");
+
+    Test.assertMessage(nearly(pace.effectiveRaceDistanceKm(), 42.4),
+        "the course length was not picked up: " + pace.effectiveRaceDistanceKm());
+    Test.assertEqualMessage(pace.remainingKm, 30.4,
+        "remaining distance ignored the course: " + pace.remainingKm);
+    Test.assertMessage(pace.raceProgress() > 0.28 && pace.raceProgress() < 0.29,
+        "progress is still measured against the setting: " + pace.raceProgress());
+    Test.assertEqualMessage(pace.effectiveTargetTimeSec(),
+        RaceSetup.timeSecFor(300, 42400),
+        "the goal time did not follow the course length");
+
+    // Navigation ends (or was never on): fall back to the configured race.
+    e.tick(3601, 12.0, 3.33, 3.33, 150, null, 0.0);
+    Test.assertEqualMessage(pace.effectiveRaceDistanceKm(), 42.195,
+        "dropping the course did not fall back to the configured distance");
+    Test.assertMessage(nearly(pace.remainingKm, 30.195),
+        "remaining distance did not fall back: " + pace.remainingKm);
+    Test.assertEqualMessage(pace.effectiveTargetTimeSec(), 12659,
+        "the goal time did not fall back with it");
+    return true;
+}
+
+// Pace, distance and goal time are three views of two numbers.  Round-tripping
+// has to land back where it started, and neither direction may escape its
+// bounds — the on-watch adjuster writes straight through these.
+(:test)
+function testTargetTimeAndPaceDeriveFromEachOther(logger as Test.Logger) as Boolean {
+    Test.assertEqualMessage(RaceSetup.timeSecFor(300, 42195), 12659,
+        "5:00 /km over a marathon is 3:30:59");
+    Test.assertEqualMessage(RaceSetup.paceSecFor(12659, 42195), 300,
+        "3:30:59 over a marathon is 5:00 /km");
+    Test.assertEqualMessage(RaceSetup.paceSecFor(RaceSetup.timeSecFor(285, 21098), 21098),
+        285, "a pace -> time -> pace round trip did not come back");
+
+    // Hostile inputs: a zero distance must not reach either divide.
+    Test.assertEqualMessage(RaceSetup.timeSecFor(300, 0), RaceSetup.MIN_TIME_SEC,
+        "a zero distance divided into the goal time");
+    Test.assertEqualMessage(RaceSetup.paceSecFor(12000, 0), RaceSetup.DEFAULT_PACE_SEC,
+        "a zero distance divided into the goal pace");
+
+    // ...and the clamps hold from both ends.
+    Test.assertEqualMessage(RaceSetup.clampPaceSec(30), RaceSetup.MIN_PACE_SEC, "pace floor");
+    Test.assertEqualMessage(RaceSetup.clampPaceSec(9999), RaceSetup.MAX_PACE_SEC, "pace ceiling");
+    Test.assertEqualMessage(RaceSetup.clampDistanceM(0), RaceSetup.MIN_DIST_M, "distance floor");
+    Test.assertEqualMessage(RaceSetup.clampDistanceM(999999), RaceSetup.MAX_DIST_M, "distance ceiling");
+    Test.assertEqualMessage(RaceSetup.timeSecFor(900, 200000), RaceSetup.MAX_TIME_SEC,
+        "the goal time escaped the 24 h ceiling the finish formatter relies on");
+
+    // A step is always clamped, so the adjuster can never hold a bad value.
+    Test.assertEqualMessage(
+        RaceSetup.fieldStep(RaceSetup.FIELD_PACE, RaceSetup.MIN_PACE_SEC, -1),
+        RaceSetup.MIN_PACE_SEC, "stepping down past the pace floor");
+    Test.assertEqualMessage(
+        RaceSetup.fieldStep(RaceSetup.FIELD_DISTANCE, 42195, 1),
+        42195 + RaceSetup.DIST_STEP_M, "a distance step is not one step");
+
+    // The goal time starts out derived (3:30:59 for 5:00 /km over a marathon),
+    // so its step has to snap to whole minutes instead of carrying the seconds.
+    Test.assertEqualMessage(RaceSetup.fieldStep(RaceSetup.FIELD_TIME, 12659, -1),
+        12600, "stepping down from 3:30:59 must land on 3:30:00");
+    Test.assertEqualMessage(RaceSetup.fieldStep(RaceSetup.FIELD_TIME, 12659, 1),
+        12660, "stepping up from 3:30:59 must land on 3:31:00");
+    Test.assertEqualMessage(RaceSetup.fieldStep(RaceSetup.FIELD_TIME, 12600, -1),
+        12540, "a whole minute must still step a whole minute down");
+    return true;
+}
+
+// The whole point of putting the targets on the watch: a change made on the
+// start line, after the field is already running, has to reach it.  The engine
+// picks it up at the next heavy refresh (10 s) without the activity restarting.
+(:test)
+function testTargetChangedOnTheWatchTakesEffectMidRace(logger as Test.Logger) as Boolean {
+    var savedPace = RaceSetup.paceSec();
+    var savedDist = RaceSetup.distanceM();
+
+    var sim = new RaceSim();
+    sim.run(60, 300.0, 150, 2);
+
+    // The runner switches from the marathon to the half, 30 s/km quicker.
+    RaceSetup.setDistanceM(21098);
+    RaceSetup.setPaceSec(270);
+    sim.run(15, 300.0, 150, 2);        // one heavy refresh is 10 s
+
+    // Capture before restoring, so a failing assertion cannot leave the
+    // simulator's stored settings pointing at a half marathon.
+    var cfg        = sim.engine.config;
+    var gotPace    = cfg.targetPaceSec;
+    var gotDistKm  = cfg.raceDistanceKm;
+    var gotTime    = cfg.targetTimeSec;
+    var gotRemain  = sim.engine.paceLogic.remainingKm;
+
+    RaceSetup.setPaceSec(savedPace);
+    RaceSetup.setDistanceM(savedDist);
+    RaceSetup.dirty = false;
+
+    logger.debug("mid-race target: " + gotDistKm + " km at " + gotPace +
+                 " s/km -> " + gotTime + " s");
+
+    Test.assertEqualMessage(gotPace, 270.0,
+        "a target pace set on the watch never reached the field: " + gotPace);
+    Test.assertMessage(nearly(gotDistKm, 21.098),
+        "a race distance set on the watch never reached the field: " + gotDistKm);
+    Test.assertEqualMessage(gotTime, RaceSetup.timeSecFor(270, 21098),
+        "the goal time was not re-derived from the new pace and distance");
+    Test.assertMessage(gotRemain < 21.098,
+        "the remaining distance did not move onto the new race: " + gotRemain);
+    return true;
+}
+
+// The heavy tier re-reads the targets every 10 s.  It must only *apply* them
+// when a stored value really moved — otherwise it would quietly revert anything
+// held on a config instance, which is exactly what RaceSim and the layout
+// preview do.
+(:test)
+function testTheSettingsPollOnlyActsOnRealChanges(logger as Test.Logger) as Boolean {
+    var sim = new RaceSim();
+    sim.engine.config.targetPaceSec = 333.0;    // nothing stored says 333
+
+    sim.run(120, 300.0, 150, 2);                // a dozen heavy refreshes
+
+    Test.assertEqualMessage(sim.engine.config.targetPaceSec, 333.0,
+        "the settings poll reverted a value nothing had changed");
+    return true;
+}
+
+// === 7. the on-watch settings menu =========================================
+
+// The settings UI cannot be reached from a test the way the system reaches it
+// (it pushes the views itself, from the activity menu), but everything that can
+// go wrong before that can: building the menu, stepping a value to its bounds,
+// writing it back, and drawing the adjuster.  Rendering into a buffered bitmap
+// gives a real Dc, so a bad font or a bad primitive fails here rather than on
+// the wrist.
+(:test)
+function testTheSettingsMenuBuildsAndDraws(logger as Test.Logger) as Boolean {
+    var savedPace = RaceSetup.paceSec();
+
+    // Building it exercises MenuItem, setSubLabel and the derived time line.
+    var menu = new RaceSettingsMenu();
+    Test.assertEqualMessage(menu.getItem(0).getLabel(), "Distanz",
+        "the first setting is not the race distance");
+    Test.assertEqualMessage(menu.timeItem.getSubLabel(),
+        RaceSetup.formatTime(RaceSetup.targetTimeSec()),
+        "the goal time line does not match the stored pace and distance");
+    new RaceDistanceMenu();
+
+    // Draw every adjuster into a real Dc.
+    var buffer = Graphics.createBufferedBitmap({:width => 416, :height => 416});
+    var dc     = (buffer.get() as Graphics.BufferedBitmap).getDc();
+    var fields = [RaceSetup.FIELD_DISTANCE, RaceSetup.FIELD_PACE,
+                  RaceSetup.FIELD_TIME, RaceSetup.FIELD_TOLERANCE] as Array<Number>;
+    for (var i = 0; i < fields.size(); i += 1) {
+        var view = new RaceAdjustView(fields[i] as Number);
+        view.change(1);
+        view.change(-1);
+        view.onUpdate(dc);
+        logger.debug(RaceSetup.fieldTitle(fields[i] as Number) + " -> " +
+                     RaceSetup.fieldText(fields[i] as Number, view.value));
+    }
+
+    // Holding a key down must run into the clamp, not out of it.
+    var paceView = new RaceAdjustView(RaceSetup.FIELD_PACE);
+    for (var i = 0; i < 400; i += 1) { paceView.change(-1); }
+    Test.assertEqualMessage(paceView.value, RaceSetup.MIN_PACE_SEC,
+        "scrolling down ran past the pace floor: " + paceView.value);
+    for (var i = 0; i < 400; i += 1) { paceView.change(1); }
+    Test.assertEqualMessage(paceView.value, RaceSetup.MAX_PACE_SEC,
+        "scrolling up ran past the pace ceiling: " + paceView.value);
+
+    // Confirming an edited goal time has to come back out as a pace.
+    var timeView = new RaceAdjustView(RaceSetup.FIELD_TIME);
+    timeView.change(1);                      // one minute slower
+    var wantedTime = timeView.value;
+    timeView.save();
+    var gotPace = RaceSetup.paceSec();
+    RaceSetup.setPaceSec(savedPace);
+    RaceSetup.dirty = false;
+
+    Test.assertEqualMessage(gotPace,
+        RaceSetup.paceSecFor(wantedTime, RaceSetup.distanceM()),
+        "confirming a goal time did not store the pace that produces it");
+    return true;
+}
+
+// Float comparison for distances: 42.195 km never survives a round trip
+// through a division exactly, and a test that demands it would only ever be
+// measuring the arithmetic.
+function nearly(actual as Float, expected as Float) as Boolean {
+    var delta = actual - expected;
+    if (delta < 0.0) { delta = -delta; }
+    return delta < 0.001;
 }

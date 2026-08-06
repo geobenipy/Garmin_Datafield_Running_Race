@@ -120,6 +120,7 @@ class RaceEngine {
             alertLogic.checkNutrition(paceLogic);
         }
         if (paceLogic.isHeavyRefreshDue()) {
+            refreshSettings();
             paceLogic.refreshHeavy();
             hrLogic.refreshHeavy(paceLogic);
             reserveLogic.refreshHeavy(paceLogic, hrLogic, currentPower, hasPower);
@@ -137,6 +138,30 @@ class RaceEngine {
                                   paceLogic.elapsedSec + config.bannerShortSec);
         } catch (ex) {
             // A lap press must never be able to take the field down.
+        }
+    }
+
+    // -----------------------------------------------------------------------
+    // Settings – heavy tier only
+    // -----------------------------------------------------------------------
+    // Target pace and race distance are editable from the wrist now (see
+    // RaceSettingsMenu), so they can change in the middle of a race and the
+    // cached config has to follow.  Two cadences, because the two costs differ
+    // by an order of magnitude:
+    //   · RaceSetup.dirty is set by the settings menu and by
+    //     AppBase.onSettingsChanged(), and triggers a full reload — including
+    //     the UserProfile HR-zone lookup, which is far too expensive to repeat.
+    //   · Otherwise just poll the three race targets: three property reads
+    //     every 10 s, and config only re-applies when a value really moved.
+    // The poll is the belt to the flag's braces: it lands the change even if
+    // the settings view ran outside this app instance.
+    // -----------------------------------------------------------------------
+    function refreshSettings() as Void {
+        if (RaceSetup.dirty) {
+            RaceSetup.dirty = false;
+            config.load();
+        } else {
+            config.pollTargets();
         }
     }
 

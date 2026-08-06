@@ -21,46 +21,15 @@
         </settingConfig>
     </setting>
 
-    <setting propertyKey="@Properties.targetDistanceCode" title="@Strings.settingTargetDistTitle">
-        <settingConfig type="list">
-            <listEntry value="0">10 km</listEntry>
-            <listEntry value="1">Halbmarathon (21.1 km)</listEntry>
-            <listEntry value="2">Marathon (42.2 km)</listEntry>
-        </settingConfig>
-    </setting>
-
-    <setting propertyKey="@Properties.targetTime" title="@Strings.settingTargetTimeTitle">
-        <settingConfig type="list">
-            <listEntry value="2700">10 km - 0:45</listEntry>
-            <listEntry value="3000">10 km - 0:50</listEntry>
-            <listEntry value="3300">10 km - 0:55</listEntry>
-            <listEntry value="3600">10 km - 1:00</listEntry>
-            <listEntry value="3900">10 km - 1:05</listEntry>
-            <listEntry value="4200">10 km - 1:10</listEntry>
-            <listEntry value="5400">HM - 1:30</listEntry>
-            <listEntry value="5700">HM - 1:35</listEntry>
-            <listEntry value="6000">HM - 1:40</listEntry>
-            <listEntry value="6300">HM - 1:45</listEntry>
-            <listEntry value="6600">HM - 1:50</listEntry>
-            <listEntry value="6900">HM - 1:55</listEntry>
-            <listEntry value="7200">HM - 2:00</listEntry>
-            <listEntry value="7500">HM - 2:05</listEntry>
-            <listEntry value="7800">HM - 2:10</listEntry>
-            <listEntry value="10800">M - 3:00</listEntry>
-            <listEntry value="11100">M - 3:05</listEntry>
-            <listEntry value="11400">M - 3:10</listEntry>
-            <listEntry value="11700">M - 3:15</listEntry>
-            <listEntry value="12000">M - 3:20</listEntry>
-            <listEntry value="12300">M - 3:25</listEntry>
-            <listEntry value="12600">M - 3:30</listEntry>
-            <listEntry value="12900">M - 3:35</listEntry>
-            <listEntry value="13200">M - 3:40</listEntry>
-            <listEntry value="13500">M - 3:45</listEntry>
-            <listEntry value="14400">M - 4:00</listEntry>
-            <listEntry value="15300">M - 4:15</listEntry>
-            <listEntry value="16200">M - 4:30</listEntry>
-            <listEntry value="18000">M - 5:00</listEntry>
-        </settingConfig>
+    <!-- Free-form metres rather than a three-way list, so a measured course
+         (42400 m) can be entered as easily as a standard distance.  The same
+         value is editable on the watch under Renn-Setup, with a preset list.
+         There is deliberately no goal-time setting: the goal time is target
+         pace x this distance, so the two can never contradict each other. -->
+    <setting propertyKey="@Properties.raceDistanceM" title="@Strings.settingTargetDistTitle"
+             prompt="@Strings.settingTargetDistPrompt">
+        <settingConfig type="numeric" min="500" max="200000"
+                       errorMessage="@Strings.settingTargetDistError" />
     </setting>
 
     <setting propertyKey="@Properties.paceToleranceSec" title="@Strings.settingPaceToleranceTitle">

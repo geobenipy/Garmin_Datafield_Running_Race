@@ -1,8 +1,14 @@
 <?xml version="1.0"?>
 <properties>
     <property id="targetPaceSecPerKm" type="number">300</property>
+    <!-- Race distance in metres.  Free-form so it can hold a measured course
+         length, and settable on the watch (Renn-Setup) as well as on the phone.
+         The goal time is derived from it and the target pace, so there is no
+         targetTime property any more. -->
+    <property id="raceDistanceM" type="number">42195</property>
+    <!-- Superseded by raceDistanceM.  Declared only so Running_RaceApp can read
+         it once, on upgrade, to carry an existing choice over. -->
     <property id="targetDistanceCode" type="number">2</property>
-    <property id="targetTime" type="number">12600</property>
     <property id="paceToleranceSec" type="number">10</property>
     <property id="nutritionStartDelaySec" type="number">900</property>
     <property id="nutritionAlarm1" type="number">8000</property>

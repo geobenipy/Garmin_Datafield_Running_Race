@@ -2,8 +2,9 @@
 <strings>
     <string id="AppName">Running Race Pro</string>
     <string id="settingTargetPaceTitle">Ziel-Pace (min/km)</string>
-    <string id="settingTargetDistTitle">Renndistanz</string>
-    <string id="settingTargetTimeTitle">Zielzeit</string>
+    <string id="settingTargetDistTitle">Renndistanz (m)</string>
+    <string id="settingTargetDistPrompt">Distanz in Metern, z. B. 42195</string>
+    <string id="settingTargetDistError">500 bis 200000 Meter</string>
     <string id="settingPaceToleranceTitle">Strategie-Toleranz</string>
     <string id="settingNutritionDelayTitle">Fuel Startverzögerung</string>
     <string id="settingNutrition1Title">Fuel-Alarm 1</string>

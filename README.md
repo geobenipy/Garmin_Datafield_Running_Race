@@ -8,10 +8,47 @@ Connect IQ data field for marathon racing on Garmin Fenix 8.
   against your target (green on pace · orange too fast · red too slow)
 - Smoothed current pace, with Ø-pace for the race and L-pace for the current
   kilometre right underneath it; 5-minute rolling pace feeds the finish projection
+- Distance as **run / still to run** — `0.0/42.2` on the start line, `10.0/32.2`
+  at ten kilometres, `21.1/21.1` at halfway
 - Race Reserve %, HR drift detection, 5 km feedback, nutrition alerts
 - Two arcs: race progress across the top, HR zones along the bottom — the HR one
   zoomed to 100 bpm–zone 5, so the range you actually race in fills the whole bar
 - Phone and chest-strap connection status
+
+## Setting up a race
+
+Target pace and race distance can be set **on the watch**, from the phone, or by
+the course you are running — in that order of authority.
+
+**On the watch** (no phone needed, works on the start line): open the activity
+menu while the field is on a data screen and pick the field's settings. Data
+fields are not allowed to take input while they are drawing, so the system
+pushes this menu itself — see `AppBase.getSettingsView()`.
+
+```
+Renn-Setup ─┬─ Distanz    5 / 10 / 15 / HM / 25 / 30 / Marathon / 50 km
+            │             ... plus "Eigene ..." for anything else, 100 m steps
+            ├─ Ziel-Pace  UP / DOWN in 5 s/km steps, START confirms
+            ├─ Zielzeit   UP / DOWN in whole minutes
+            └─ Toleranz   how far off pace still counts as green
+```
+
+A change takes effect within 10 seconds — the field re-reads its targets on its
+next heavy refresh, so it does not need the activity restarted.
+
+**Zielzeit is not a separate setting.** It is target pace × race distance, so
+editing the pace moves the goal time and editing the goal time back-computes the
+pace. The two can never contradict each other, and everything downstream (the
+finish projection's colour, the progress arc, the reserve drain) follows.
+
+**A loaded course wins.** When navigating a route, the real remaining distance
+comes from the watch (`Activity.Info.distanceToDestination`) and the race becomes
+as long as the course is. A course measuring 42.4 km moves the remaining
+distance, the progress arc, the reserve and the goal time onto 42.4 km together.
+(PacePro's target pace is not exposed to Connect IQ; the route is.)
+
+**From the phone**, the Connect IQ settings hold the same values — the distance
+as free-form metres, so a measured course can be entered exactly.
 
 ## Build & run
 
@@ -84,6 +121,13 @@ clock that steps backwards) never throws.
 
 The marathon test takes a minute or two. That is the point — the crash it guards
 against only appears once the buffers have filled up.
+
+The settings side is covered too: the suite builds the real on-watch menu, steps
+each value into its clamps, renders the adjuster into a buffered bitmap (so a bad
+font or primitive fails here rather than on the wrist), and drives a target
+change through a running race to prove it lands within one heavy refresh. What it
+cannot cover is the system *invoking* `getSettingsView()` from the activity menu
+— that is platform behaviour; check it once on the watch after installing.
 
 ## Troubleshooting
 

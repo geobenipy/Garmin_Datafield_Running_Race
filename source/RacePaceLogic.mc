@@ -33,6 +33,8 @@ class RacePaceLogic {
     // --- live values updated every compute() ---
     var elapsedSec      = 0;     // activity TIMER seconds (frozen while paused)
     var distanceKm      = 0.0;
+    // What is still to run (km).  This is the number on the face next to the
+    // distance covered, and the one the finish projection multiplies out.
     var remainingKm     = 42.195;
     // Real remaining distance along a loaded course (km), 0 = no course active.
     // Set by the engine from Activity.Info.distanceToDestination each compute().
@@ -177,7 +179,7 @@ class RacePaceLogic {
         }
 
         if (distanceKm <= 0.05) {
-            projectedFinishSec = config.targetTimeSec;
+            projectedFinishSec = effectiveTargetTimeSec();
         } else if (remainingKm <= 0.0) {
             projectedFinishSec = elapsedSec;
         } else {
@@ -274,12 +276,43 @@ class RacePaceLogic {
         return pace;
     }
 
+    // -----------------------------------------------------------------------
+    // How long the race actually is today
+    // -----------------------------------------------------------------------
+    // A loaded course outranks the configured distance: on the day, the route
+    // in the watch is the truth, and it is the only way Connect IQ lets a data
+    // field learn the real course length (PacePro's target pace is not exposed,
+    // but Activity.Info.distanceToDestination is).  Without one, this is the
+    // distance set on the phone or on the wrist.
+    //
+    // Everything that divides by "the race" divides by this — the progress arc,
+    // the reserve estimate and the target time — so a 42.4 km measured course
+    // moves all three together rather than only the remaining-distance readout.
+    function effectiveRaceDistanceKm() as Float {
+        if (courseRemainingKm > 0.0) {
+            var total = distanceKm + courseRemainingKm;
+            if (total > 0.0) { return total; }
+        }
+        return config.raceDistanceKm;
+    }
+
+    // The goal time, re-derived from the target pace over whatever distance is
+    // actually being run.  Not a stored setting: pace and distance are both
+    // editable mid-race now, and a separately stored time would start
+    // contradicting them the moment either one moved.
+    function effectiveTargetTimeSec() as Number {
+        var total = effectiveRaceDistanceKm();
+        if (!(total > 0.0)) { return config.targetTimeSec; }
+        return RaceSetup.clampTimeSec(roundNumber(config.targetPaceSec * total));
+    }
+
     // Fraction of the race completed, 0.0 .. 1.0 — drives the progress arc.
-    // Guards the divide: raceDistanceKm comes from a setting and a zero there
-    // must not be able to reach the drawing code.
+    // Guards the divide: the distance comes from a setting or a course, and a
+    // zero from either must not be able to reach the drawing code.
     function raceProgress() as Float {
-        if (!(config.raceDistanceKm > 0.0)) { return 0.0; }
-        var p = distanceKm / config.raceDistanceKm;
+        var total = effectiveRaceDistanceKm();
+        if (!(total > 0.0)) { return 0.0; }
+        var p = distanceKm / total;
         if (!(p > 0.0)) { return 0.0; }
         if (p > 1.0)    { return 1.0; }
         return p;

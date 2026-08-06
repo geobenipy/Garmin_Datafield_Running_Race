@@ -43,7 +43,7 @@ class RaceReserveLogic {
                 (reservePercent.toFloat() * 0.55) + (computed * 0.45));
         }
 
-        if (paceLogic.distanceKm >= config.raceDistanceKm) {
+        if (paceLogic.raceProgress() >= 1.0) {
             reservePercent = 0;
         }
         // The readout is a percentage; keep it one even if an input drifts.
@@ -129,11 +129,10 @@ class RaceReserveLogic {
 
         score = clamp(score, 18.0, 100.0);
 
-        var progress = config.raceDistanceKm > 0.0
-                     ? clamp(paceLogic.distanceKm / config.raceDistanceKm,
-                             0.0, 1.0)
-                     : 0.0;
-
+        // raceProgress() already guards the divide and clamps to 0..1, and it
+        // is course-aware — so a loaded route of its own length paces the
+        // reserve drain over the real distance, not over the configured one.
+        var progress = paceLogic.raceProgress();
         if (progress >= 1.0) { return 0.0; }
 
         var pf = clamp(1.0 - (progress * 0.78), 0.05, 1.0);

@@ -23,7 +23,12 @@ class RaceSim {
     function initialize() {
         engine = new RaceEngine();
         // Pin the tuning so assertions never depend on the simulator's user
-        // profile or on whatever settings happen to be stored.
+        // profile or on whatever settings happen to be stored.  The heavy tier
+        // re-reads the race targets every 10 s now that they are editable on
+        // the watch, but it only re-applies when a stored value actually moved,
+        // so these survive — except through a pending dirty flag, which forces
+        // a full reload.  Clear it, or a settings test would leak into the next.
+        RaceSetup.dirty = false;
         engine.config.targetPaceSec    = 300.0;      // 5:00 /km
         engine.config.paceToleranceSec = 10.0;
         engine.config.raceDistanceKm   = 42.195;

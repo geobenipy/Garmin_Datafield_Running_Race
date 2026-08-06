@@ -11,7 +11,7 @@ import Toybox.WatchUi;
 // sits inside the ~r168 circle the HR zone arc (r182) leaves free, so nothing
 // ever touches the colour bar.
 //   R1  y= 56  phone + HR-strap glyphs        [race progress arc above them]
-//   R2  y=126  Distanz done/total (left)   |  Reserve % (right)
+//   R2  y=126  Distanz done/remaining (left) | Reserve % (right)
 //   R3  y=208  HERO tile: current pace, huge · Ø-pace + lap pace underneath
 //   R4  y=297  Elapsed (left)              |  Projected finish (right)
 //   R5  y=352  current HR (big) + drift trend arrow beside it        [HR arc]
@@ -47,6 +47,14 @@ class Running_RaceView extends WatchUi.DataField {
     // The HR arc starts here instead of at 0 bpm: a racing heart rate never
     // goes below it, so the whole bar is spent on the range that matters.
     const HR_ARC_MIN_BPM = 100.0;
+
+    // The room R2 really has, in design px.  Measured at the *top* of the
+    // glyphs, not at their baseline: at y=126 the content circle allows x=61
+    // on the centre line but only x=64 fourteen pixels higher, and it is the
+    // corner of the text box that hits the arc first.
+    const R2_LEFT    = 66;
+    const R2_RIGHT   = 350;
+    const R2_MIN_GAP = 14;
 
     // DEV ONLY – when true, compute() skips live sensors and renders a fixed,
     // representative mid-marathon state so the layout/colours can be reviewed in
@@ -155,16 +163,8 @@ class Running_RaceView extends WatchUi.DataField {
         drawPhoneIcon(dc, S(182, scale), S(56, scale), scale, engine.phoneConnected);
         drawHeartIcon(dc, S(234, scale), S(56, scale), scale, engine.chestStatus >= 1);
 
-        // ── R2  Distanz (done/total) | Reserve % ─────────────────────────
-        // y=126 is not free choice: the progress arc's end caps sit at y=104,
-        // so anything higher runs into the scale at the left and right edges.
-        var distTxt = formatDistance(paceLogic.distanceKm) + "/" +
-                      config.raceDistanceKm.toNumber().format("%d");
-        lbl(dc, S(142, scale), S(126, scale), distTxt,
-            Graphics.FONT_SMALL, COLOR_WHITE);
-        lbl(dc, S(278, scale), S(126, scale),
-            formatReserve(reserveLogic.reservePercent), Graphics.FONT_SMALL,
-            colorForReserve(reserveLogic.reservePercent));
+        // ── R2  Distanz (gelaufen/übrig) | Reserve % ─────────────────────
+        drawDistanceRow(dc, S(126, scale), scale);
 
         // ── R3  HERO current pace ────────────────────────────────────────
         drawPacePanel(dc, cx, S(208, scale), S(280, scale), S(116, scale), scale);
@@ -182,6 +182,39 @@ class Running_RaceView extends WatchUi.DataField {
             // A draw failure must never freeze the field; the background is
             // already cleared, so we simply skip the rest of this frame.
         }
+    }
+
+    // =========================================================================
+    // R2: distance covered / distance left, and the reserve %
+    // =========================================================================
+    // done/remaining, not done/total: the total is already drawn as the progress
+    // arc above this row, and past 30 km the only question worth a number is
+    // how much is left.  A marathon reads 0.0/42.2 → 10.0/32.2 → 42.2/0.0.
+    //
+    // Both readouts are anchored to the ends of the chord the content circle
+    // leaves free here rather than centred on fixed points, because both change
+    // width during a race: the distance gains a digit at 10 km, the reserve
+    // loses one as soon as it drops below 100 %.  Centred, the pair drifted into
+    // each other; anchored, the outer edges stay put and the gap moves instead.
+    // The font is a budget rather than a constant for the same reason — an ultra
+    // distance ("100.0/100.0") does not fit beside a reserve at FONT_SMALL.
+    function drawDistanceRow(dc as Dc, cy as Number, scale as Float) as Void {
+        var distTxt = formatDistance(paceLogic.distanceKm) + "/" +
+                      formatDistance(paceLogic.remainingKm);
+        var resTxt  = formatReserve(reserveLogic.reservePercent);
+
+        var left  = S(R2_LEFT,  scale);
+        var right = S(R2_RIGHT, scale);
+        var font  = Graphics.FONT_SMALL;
+        if (textWidth(dc, distTxt, font) + textWidth(dc, resTxt, font) +
+            S(R2_MIN_GAP, scale) > right - left) {
+            font = Graphics.FONT_XTINY;
+        }
+
+        lbl(dc, left + (textWidth(dc, distTxt, font) / 2), cy, distTxt,
+            font, COLOR_WHITE);
+        lbl(dc, right - (textWidth(dc, resTxt, font) / 2), cy, resTxt,
+            font, colorForReserve(reserveLogic.reservePercent));
     }
 
     // =========================================================================
@@ -530,9 +563,13 @@ class Running_RaceView extends WatchUi.DataField {
         return (paceSeconds > 0.0 && paceSeconds <= 1200.0) ? COLOR_WHITE : COLOR_MUTED;
     }
 
+    // Green when the projection is still inside the goal time.  The goal comes
+    // from paceLogic, not from config, because it is target pace x the distance
+    // actually being run — so on a loaded course it is the course's goal time.
     function colorForProjectedFinish() as Number {
-        if (paceLogic.projectedFinishSec <= 0 || config.targetTimeSec <= 0) { return COLOR_WHITE; }
-        return paceLogic.projectedFinishSec <= config.targetTimeSec ? COLOR_GREEN : COLOR_RED;
+        var target = paceLogic.effectiveTargetTimeSec();
+        if (paceLogic.projectedFinishSec <= 0 || target <= 0) { return COLOR_WHITE; }
+        return paceLogic.projectedFinishSec <= target ? COLOR_GREEN : COLOR_RED;
     }
 
     // Reserve is neutral until it runs low, then a single red warning.

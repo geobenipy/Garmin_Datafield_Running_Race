@@ -1,4 +1,3 @@
-import Toybox.Application;
 import Toybox.Lang;
 import Toybox.UserProfile;
 
@@ -7,6 +6,10 @@ import Toybox.UserProfile;
 // ---------------------------------------------------------------------------
 // FIX: UserProfile.getHeartRateZones() requires UserProfile.SportHrZone enum,
 //      NOT Activity.Sport.  The correct constant is HR_ZONE_SPORT_RUNNING.
+//
+// The three race targets (pace, distance, tolerance) go through RaceSetup, the
+// module the on-watch settings menu also writes through, and are re-read on
+// every heavy refresh — see pollTargets().  Everything else here is loaded once.
 // ---------------------------------------------------------------------------
 
 class RaceConfig {
@@ -28,9 +31,18 @@ class RaceConfig {
     const MAX_HR_BPM = 240;
 
     var targetPaceSec       = 300.0;
-    var targetTimeSec       = 12600;
+    var targetTimeSec       = 12659;   // derived: targetPaceSec x raceDistanceKm
     var paceToleranceSec    = 10.0;
     var raceDistanceKm      = 42.195;
+
+    // The three race targets as last read from storage, so pollTargets() can
+    // tell a real change from a re-read.  Two things depend on that: the heavy
+    // tier can poll every 10 s without re-running the expensive UserProfile
+    // lookup, and pinning a value on a config instance (RaceSim, the layout
+    // preview) survives a poll instead of being silently reverted.
+    var lastPaceSetting     = -1;
+    var lastDistSetting     = -1;
+    var lastToleranceSetting = -1;
 
     var heavyUpdateSec      = 10;
     var sampleWindowSec     = 600;
@@ -52,24 +64,14 @@ class RaceConfig {
     }
 
     function load() as Void {
-        // Clamped, because a corrupt or out-of-range setting must not be able to
-        // poison every pace comparison and projection for the whole race.
-        targetPaceSec    = clampInt(readInt("targetPaceSecPerKm", 300), 120, 900).toFloat();
-        paceToleranceSec = clampInt(readInt("paceToleranceSec",   10),    1, 120).toFloat();
+        // -1 can never match a clamped setting, so this forces pollTargets to
+        // apply rather than to short-circuit on the values already held.
+        lastPaceSetting      = -1;
+        lastDistSetting      = -1;
+        lastToleranceSetting = -1;
+        pollTargets();
+
         nutritionStartDelaySec = clampInt(readInt("nutritionStartDelaySec", 900), 0, 7200);
-
-        // 0 = 10 km, 1 = Half marathon, 2 = Marathon
-        var distCode = readInt("targetDistanceCode", 2);
-        if (distCode == 0) {
-            raceDistanceKm = 10.0;
-        } else if (distCode == 1) {
-            raceDistanceKm = 21.0975;
-        } else {
-            raceDistanceKm = 42.195;
-        }
-
-        var defaultTime = roundNumber(targetPaceSec * raceDistanceKm);
-        targetTimeSec   = clampInt(readInt("targetTime", defaultTime), 600, 86400);
 
         nutritionAlerts = [
             normalizeFuel(readInt("nutritionAlarm1", 8000)),
@@ -79,6 +81,38 @@ class RaceConfig {
         ] as Array<Number>;
 
         loadHrZones();
+    }
+
+    // -----------------------------------------------------------------------
+    // The three race targets.  Cheap on purpose — three property reads, no
+    // UserProfile call — because RaceEngine calls it on every heavy refresh so
+    // that a target changed on the wrist mid-race takes effect within 10 s.
+    // Returns true only when a stored value actually moved.
+    //
+    // targetTimeSec is derived here rather than stored: pace and distance are
+    // both editable from the watch now, and a separately stored goal time would
+    // start contradicting them the first time either one changed.
+    // -----------------------------------------------------------------------
+    function pollTargets() as Boolean {
+        var pace      = RaceSetup.paceSec();
+        var meters    = RaceSetup.distanceM();
+        var tolerance = RaceSetup.toleranceSec();
+
+        if (pace   == lastPaceSetting &&
+            meters == lastDistSetting &&
+            tolerance == lastToleranceSetting) {
+            return false;
+        }
+
+        lastPaceSetting      = pace;
+        lastDistSetting      = meters;
+        lastToleranceSetting = tolerance;
+
+        targetPaceSec    = pace.toFloat();
+        raceDistanceKm   = meters.toFloat() / 1000.0;
+        paceToleranceSec = tolerance.toFloat();
+        targetTimeSec    = RaceSetup.timeSecFor(pace, meters);
+        return true;
     }
 
     // -----------------------------------------------------------------------
@@ -125,24 +159,15 @@ class RaceConfig {
         }
     }
 
-    // A settings sync can leave a key missing or holding a non-Number, and
-    // getValue() itself throws on some firmware for an unknown key.  Either
-    // must fall back to the default rather than take the field down.
+    // Both delegate to RaceSetup, which is also what the on-watch settings menu
+    // reads and writes through — one guarded property read and one clamp per
+    // value, no matter which side of the app is asking.
     function readInt(key as String, fallback as Number) as Number {
-        try {
-            var value = Application.Properties.getValue(key);
-            if (value instanceof Lang.Number) { return value; }
-            if (value instanceof Lang.Float)  { return value.toNumber(); }
-        } catch (e) {
-            // fall through to the default
-        }
-        return fallback;
+        return RaceSetup.readNumber(key, fallback);
     }
 
     function clampInt(value as Number, low as Number, high as Number) as Number {
-        if (value < low)  { return low;  }
-        if (value > high) { return high; }
-        return value;
+        return RaceSetup.clampInt(value, low, high);
     }
 
     function normalizeFuel(raw as Number) as Number {
@@ -156,10 +181,5 @@ class RaceConfig {
                 (values as Array<Number>)[i] = (values as Array<Number>)[i - 1] + 1;
             }
         }
-    }
-
-    function roundNumber(value as Float) as Number {
-        if (value < 0.0) { return (value - 0.5).toNumber(); }
-        return (value + 0.5).toNumber();
     }
 }
