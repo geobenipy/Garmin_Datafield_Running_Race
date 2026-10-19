@@ -159,37 +159,6 @@ change through a running race to prove it lands within one heavy refresh. What i
 cannot cover is the system *invoking* `getSettingsView()` from the activity menu
 — that is platform behaviour; check it once on the watch after installing.
 
-## Troubleshooting
-
-- **`.\run.ps1 : ... die Ausführung von Skripts ... deaktiviert` / "running scripts
-  is disabled"** — PowerShell's execution policy blocks `.ps1` files. Enable local
-  scripts once (per user, persistent):
-
-  ```powershell
-  Set-ExecutionPolicy -Scope CurrentUser -ExecutionPolicy RemoteSigned
-  ```
-
-- **Simulator shows `Signature check failed on file: RUNNING_RACE`** — the developer
-  key must be **4096-bit RSA**. A 2048-bit key compiles fine but fails the runtime
-  signature check. Regenerate:
-
-  ```powershell
-  openssl genrsa -out developer_key.pem 4096
-  openssl pkcs8 -topk8 -inform PEM -outform DER -in developer_key.pem -out developer_key_pkcs8.der -nocrypt
-  ```
-
-  then rebuild and reload. (Only reuse an old key if the app is already published on
-  the IQ store under it — store updates must keep the same signing key.)
-
-- **The field froze during a run and was gone from the data screen after a reboot** —
-  that is the watchdog: `compute()` stopped returning, so Garmin killed the field
-  and removed it. It is not a signature or install problem, and `try/catch` cannot
-  catch it. Look for a loop in the update path that fails to make progress. The
-  July 2026 instance was `trimSamples()` using `Array.remove(0)`, which removes by
-  *value* — no pace sample is ever `0`, so the ring buffer never shrank and the
-  trim loop spun forever once it filled (~10 min of running). `.\run.ps1 -Test`
-  now covers this class of failure; run it before racing.
-
 ## Repo Notes
 
 - `bin/` and signing keys are ignored through `.gitignore`.
