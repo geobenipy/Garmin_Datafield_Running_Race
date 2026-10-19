@@ -1,19 +1,49 @@
+<div align="center">
+
 # Running Race
 
-Connect IQ data field for marathon racing on Garmin Fenix 8.
+**A pace-first Connect IQ data field for marathon racing on the Garmin fēnix 8.**
+
+![Monkey C](https://img.shields.io/badge/Monkey%20C-Connect%20IQ-1f6feb?style=flat-square)
+![Device](https://img.shields.io/badge/device-fēnix%208%2043mm-2ea043?style=flat-square)
+![API](https://img.shields.io/badge/min%20API-6.0.0-8957e5?style=flat-square)
+![Tests](https://img.shields.io/badge/unit%20tests-21%20passing-2ea043?style=flat-square)
+
+<img src="docs/screenshot.png" alt="Running Race on a fēnix 8 43mm" width="860">
+
+</div>
+
+One glance, one number that matters: your pace, coloured against your target.
+Everything else sits quietly around it and only speaks up when it has to.
 
 ## Highlights
 
-- Pace-first circular race layout: current pace as the hero value, colour-coded
-  against your target (green on pace · orange too fast · red too slow)
-- Smoothed current pace, with Ø-pace for the race and L-pace for the current
-  kilometre right underneath it; 5-minute rolling pace feeds the finish projection
-- Distance as **run / still to run** — `0.0/42.2` on the start line, `10.0/32.2`
-  at ten kilometres, `21.1/21.1` at halfway
-- Race Reserve %, HR drift detection, 5 km feedback, nutrition alerts
-- Two arcs: race progress across the top, HR zones along the bottom — the HR one
-  zoomed to 100 bpm–zone 5, so the range you actually race in fills the whole bar
-- Phone and chest-strap connection status
+| | |
+|---|---|
+| **Hero pace** | Smoothed current pace, large and centred. Green on target · orange too fast · red too slow. Ø-pace for the race and L-pace for the current kilometre sit right underneath. |
+| **Distance** | Shown as *run / still to run*: `0.0/42.2` on the start line, `10.0/32.2` at ten kilometres, `21.1/21.1` at halfway. |
+| **Race reserve** | A running stamina estimate from pace, heart rate and (optionally) power. Neutral until it runs low, then one red warning. |
+| **Two arcs** | Race progress fills the top, left to right. Heart-rate zones run along the bottom, zoomed to 100 bpm – zone 5 so the range you actually race in fills the whole bar. |
+| **Drift detection** | A trend arrow next to your heart rate compares it with its own 5-minute average and turns red when drift is detected. |
+| **Alerts** | Nutrition reminders by time or distance, plus short feedback every 5 km. |
+| **Sensor status** | Phone and chest-strap connection at a glance. |
+| **Race setup on the wrist** | Distance, target pace, goal time and tolerance, editable on the start line without a phone. |
+| **Built not to freeze** | A synthetic 42 km race, including an auto-pause and a GPS dropout, runs as part of the test suite. |
+
+## Reading the face
+
+```
+        ▁▂▃ race progress ▃▂▁          top arc, fills left to right
+          phone      heart
+     13.2/29.0       78%               run / still to run  ·  reserve
+   ┌──────────────────────┐
+   │         4:56         │            current pace, coloured vs. target
+   │    Ø 4:59   L 4:50   │            race average  ·  current kilometre
+   └──────────────────────┘
+      1:05:00      3:28                elapsed time  ·  projected finish (h:mm)
+        155 ▲5                         heart rate  ·  drift trend
+        ▔▔▔ HR zones ▔▔▔               bottom arc, zones 1–5
+```
 
 ## Setting up a race
 
