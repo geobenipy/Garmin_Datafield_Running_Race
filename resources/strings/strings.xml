@@ -1,16 +1,16 @@
 <?xml version="1.0"?>
 <strings>
     <string id="AppName">Running Race Pro</string>
-    <string id="settingTargetPaceTitle">Ziel-Pace (min/km)</string>
-    <string id="settingTargetDistTitle">Renndistanz (m)</string>
-    <string id="settingTargetDistPrompt">Distanz in Metern, z. B. 42195</string>
-    <string id="settingTargetDistError">500 bis 200000 Meter</string>
-    <string id="settingPaceToleranceTitle">Strategie-Toleranz</string>
-    <string id="settingNutritionDelayTitle">Fuel Startverzögerung</string>
-    <string id="settingNutrition1Title">Fuel-Alarm 1</string>
-    <string id="settingNutrition2Title">Fuel-Alarm 2</string>
-    <string id="settingNutrition3Title">Fuel-Alarm 3</string>
-    <string id="settingNutrition4Title">Fuel-Alarm 4</string>
+    <string id="settingTargetPaceTitle">Target pace (min/km)</string>
+    <string id="settingTargetDistTitle">Race distance (m)</string>
+    <string id="settingTargetDistPrompt">Distance in metres, e.g. 42195</string>
+    <string id="settingTargetDistError">500 to 200000 metres</string>
+    <string id="settingPaceToleranceTitle">Pace tolerance</string>
+    <string id="settingNutritionDelayTitle">Fuel start delay</string>
+    <string id="settingNutrition1Title">Fuel alert 1</string>
+    <string id="settingNutrition2Title">Fuel alert 2</string>
+    <string id="settingNutrition3Title">Fuel alert 3</string>
+    <string id="settingNutrition4Title">Fuel alert 4</string>
     <string id="settingHRZone1Title">HR Zone 1 Max (bpm)</string>
     <string id="settingHRZone2Title">HR Zone 2 Max (bpm)</string>
     <string id="settingHRZone3Title">HR Zone 3 Max (bpm)</string>

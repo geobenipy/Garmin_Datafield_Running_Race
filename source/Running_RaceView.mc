@@ -11,7 +11,7 @@ import Toybox.WatchUi;
 // sits inside the ~r168 circle the HR zone arc (r182) leaves free, so nothing
 // ever touches the colour bar.
 //   R1  y= 56  phone + HR-strap glyphs        [race progress arc above them]
-//   R2  y=126  Distanz done/remaining (left) | Reserve % (right)
+//   R2  y=126  Distance done/remaining (left) | Reserve % (right)
 //   R3  y=208  HERO tile: current pace, huge · Ø-pace + lap pace underneath
 //   R4  y=297  Elapsed (left)              |  Projected finish (right)
 //   R5  y=352  current HR (big) + drift trend arrow beside it        [HR arc]
@@ -163,7 +163,7 @@ class Running_RaceView extends WatchUi.DataField {
         drawPhoneIcon(dc, S(182, scale), S(56, scale), scale, engine.phoneConnected);
         drawHeartIcon(dc, S(234, scale), S(56, scale), scale, engine.chestStatus >= 1);
 
-        // ── R2  Distanz (gelaufen/übrig) | Reserve % ─────────────────────
+        // ── R2  Distance (done/remaining) | Reserve % ─────────────────────
         drawDistanceRow(dc, S(126, scale), scale);
 
         // ── R3  HERO current pace ────────────────────────────────────────

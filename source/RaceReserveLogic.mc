@@ -1,7 +1,7 @@
 import Toybox.Lang;
 
 // ---------------------------------------------------------------------------
-// RaceReserveLogic  –  running reserve / stamina estimate (Feld 12)
+// RaceReserveLogic  –  running reserve / stamina estimate (field 12)
 // ---------------------------------------------------------------------------
 // FIX: Explicit `as Number` casts on config.hrZones[] access to eliminate
 //      container-type warnings.

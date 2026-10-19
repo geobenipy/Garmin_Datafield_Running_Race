@@ -12,12 +12,12 @@ import Toybox.WatchUi;
 // running field never sees these views — it picks the change up at its next
 // heavy refresh through RaceSetup.dirty.
 //
-//   Renn-Setup ─┬─ Distanz   → preset list (+ "Eigene ..." → adjuster, 100 m)
-//               ├─ Ziel-Pace → adjuster, 5 s/km steps
-//               ├─ Zielzeit  → adjuster, 1 min steps  (back-computes the pace)
-//               └─ Toleranz  → adjuster, 5 s/km steps
+//   Race Setup ─┬─ Distance     → preset list (+ "Custom ..." → adjuster, 100 m)
+//               ├─ Target pace  → adjuster, 5 s/km steps
+//               ├─ Goal time    → adjuster, 1 min steps  (back-computes the pace)
+//               └─ Tolerance    → adjuster, 5 s/km steps
 //
-// Zielzeit is not a fourth stored setting; it is pace x distance seen from the
+// Goal time is not a fourth stored setting; it is pace x distance seen from the
 // other end.  Every sub-label is therefore rebuilt after any change (see
 // RaceSettingsMenu.refresh) — editing the pace has to move the time under it.
 //
@@ -34,12 +34,12 @@ class RaceSettingsMenu extends WatchUi.Menu2 {
     var toleranceItem as WatchUi.MenuItem;
 
     function initialize() {
-        Menu2.initialize({:title => "Renn-Setup"});
+        Menu2.initialize({:title => "Race Setup"});
 
-        distanceItem  = new WatchUi.MenuItem("Distanz",   "", RaceSetup.FIELD_DISTANCE,  null);
-        paceItem      = new WatchUi.MenuItem("Ziel-Pace", "", RaceSetup.FIELD_PACE,      null);
-        timeItem      = new WatchUi.MenuItem("Zielzeit",  "", RaceSetup.FIELD_TIME,      null);
-        toleranceItem = new WatchUi.MenuItem("Toleranz",  "", RaceSetup.FIELD_TOLERANCE, null);
+        distanceItem  = new WatchUi.MenuItem("Distance",   "", RaceSetup.FIELD_DISTANCE,  null);
+        paceItem      = new WatchUi.MenuItem("Target pace", "", RaceSetup.FIELD_PACE,      null);
+        timeItem      = new WatchUi.MenuItem("Goal time",  "", RaceSetup.FIELD_TIME,      null);
+        toleranceItem = new WatchUi.MenuItem("Tolerance",  "", RaceSetup.FIELD_TOLERANCE, null);
 
         addItem(distanceItem);
         addItem(paceItem);
@@ -90,23 +90,23 @@ class RaceSettingsMenuDelegate extends WatchUi.Menu2InputDelegate {
 // Distance preset list
 // ---------------------------------------------------------------------------
 // Item ids are the distance in metres, so the delegate needs no lookup table.
-// -1 is the odd one out: "Eigene ..." opens the adjuster on the current value.
+// -1 is the odd one out: "Custom ..." opens the adjuster on the current value.
 
 class RaceDistanceMenu extends WatchUi.Menu2 {
 
     const ID_CUSTOM = -1;
 
     function initialize() {
-        Menu2.initialize({:title => "Distanz"});
+        Menu2.initialize({:title => "Distance"});
         addPreset("5 km",          5000);
         addPreset("10 km",         10000);
         addPreset("15 km",         15000);
-        addPreset("Halbmarathon",  21098);
+        addPreset("Half marathon",  21098);
         addPreset("25 km",         25000);
         addPreset("30 km",         30000);
         addPreset("Marathon",      42195);
         addPreset("50 km",         50000);
-        addItem(new WatchUi.MenuItem("Eigene ...", "100 m Schritte",
+        addItem(new WatchUi.MenuItem("Custom ...", "100 m steps",
                                      ID_CUSTOM, null));
     }
 

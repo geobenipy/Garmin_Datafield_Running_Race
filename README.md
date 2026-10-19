@@ -26,17 +26,17 @@ fields are not allowed to take input while they are drawing, so the system
 pushes this menu itself — see `AppBase.getSettingsView()`.
 
 ```
-Renn-Setup ─┬─ Distanz    5 / 10 / 15 / HM / 25 / 30 / Marathon / 50 km
-            │             ... plus "Eigene ..." for anything else, 100 m steps
-            ├─ Ziel-Pace  UP / DOWN in 5 s/km steps, START confirms
-            ├─ Zielzeit   UP / DOWN in whole minutes
-            └─ Toleranz   how far off pace still counts as green
+Race Setup ─┬─ Distance     5 / 10 / 15 / HM / 25 / 30 / Marathon / 50 km
+            │              ... plus "Custom ..." for anything else, 100 m steps
+            ├─ Target pace  UP / DOWN in 5 s/km steps, START confirms
+            ├─ Goal time    UP / DOWN in whole minutes
+            └─ Tolerance    how far off pace still counts as green
 ```
 
 A change takes effect within 10 seconds — the field re-reads its targets on its
 next heavy refresh, so it does not need the activity restarted.
 
-**Zielzeit is not a separate setting.** It is target pace × race distance, so
+**Goal time is not a separate setting.** It is target pace × race distance, so
 editing the pace moves the goal time and editing the goal time back-computes the
 pace. The two can never contradict each other, and everything downstream (the
 finish projection's colour, the progress arc, the reserve drain) follows.

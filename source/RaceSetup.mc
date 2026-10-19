@@ -111,10 +111,10 @@ module RaceSetup {
     // RaceAdjustView edit any of them.
     // -----------------------------------------------------------------------
     function fieldTitle(field as Number) as String {
-        if (field == FIELD_DISTANCE)  { return "Distanz";   }
-        if (field == FIELD_PACE)      { return "Ziel-Pace"; }
-        if (field == FIELD_TIME)      { return "Zielzeit";  }
-        return "Toleranz";
+        if (field == FIELD_DISTANCE)  { return "Distance";   }
+        if (field == FIELD_PACE)      { return "Target pace"; }
+        if (field == FIELD_TIME)      { return "Goal time";  }
+        return "Tolerance";
     }
 
     function fieldUnit(field as Number) as String {

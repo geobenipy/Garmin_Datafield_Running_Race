@@ -23,7 +23,7 @@
 
     <!-- Free-form metres rather than a three-way list, so a measured course
          (42400 m) can be entered as easily as a standard distance.  The same
-         value is editable on the watch under Renn-Setup, with a preset list.
+         value is editable on the watch under Race Setup, with a preset list.
          There is deliberately no goal-time setting: the goal time is target
          pace x this distance, so the two can never contradict each other. -->
     <setting propertyKey="@Properties.raceDistanceM" title="@Strings.settingTargetDistTitle"
@@ -43,7 +43,7 @@
 
     <setting propertyKey="@Properties.nutritionStartDelaySec" title="@Strings.settingNutritionDelayTitle">
         <settingConfig type="list">
-            <listEntry value="0">Sofort</listEntry>
+            <listEntry value="0">Immediately</listEntry>
             <listEntry value="300">5 min</listEntry>
             <listEntry value="600">10 min</listEntry>
             <listEntry value="900">15 min</listEntry>
@@ -54,7 +54,7 @@
 
     <setting propertyKey="@Properties.nutritionAlarm1" title="@Strings.settingNutrition1Title">
         <settingConfig type="list">
-            <listEntry value="0">Aus</listEntry>
+            <listEntry value="0">Off</listEntry>
             <listEntry value="-900">15 min</listEntry>
             <listEntry value="-1200">20 min</listEntry>
             <listEntry value="-1500">25 min</listEntry>
@@ -81,7 +81,7 @@
 
     <setting propertyKey="@Properties.nutritionAlarm2" title="@Strings.settingNutrition2Title">
         <settingConfig type="list">
-            <listEntry value="0">Aus</listEntry>
+            <listEntry value="0">Off</listEntry>
             <listEntry value="-900">15 min</listEntry>
             <listEntry value="-1200">20 min</listEntry>
             <listEntry value="-1500">25 min</listEntry>
@@ -108,7 +108,7 @@
 
     <setting propertyKey="@Properties.nutritionAlarm3" title="@Strings.settingNutrition3Title">
         <settingConfig type="list">
-            <listEntry value="0">Aus</listEntry>
+            <listEntry value="0">Off</listEntry>
             <listEntry value="-900">15 min</listEntry>
             <listEntry value="-1200">20 min</listEntry>
             <listEntry value="-1500">25 min</listEntry>
@@ -135,7 +135,7 @@
 
     <setting propertyKey="@Properties.nutritionAlarm4" title="@Strings.settingNutrition4Title">
         <settingConfig type="list">
-            <listEntry value="0">Aus</listEntry>
+            <listEntry value="0">Off</listEntry>
             <listEntry value="-900">15 min</listEntry>
             <listEntry value="-1200">20 min</listEntry>
             <listEntry value="-1500">25 min</listEntry>

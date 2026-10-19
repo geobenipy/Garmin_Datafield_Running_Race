@@ -2,7 +2,7 @@
 <properties>
     <property id="targetPaceSecPerKm" type="number">300</property>
     <!-- Race distance in metres.  Free-form so it can hold a measured course
-         length, and settable on the watch (Renn-Setup) as well as on the phone.
+         length, and settable on the watch (Race Setup) as well as on the phone.
          The goal time is derived from it and the target pace, so there is no
          targetTime property any more. -->
     <property id="raceDistanceM" type="number">42195</property>

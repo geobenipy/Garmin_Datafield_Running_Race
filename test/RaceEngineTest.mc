@@ -578,7 +578,7 @@ function testTheSettingsMenuBuildsAndDraws(logger as Test.Logger) as Boolean {
 
     // Building it exercises MenuItem, setSubLabel and the derived time line.
     var menu = new RaceSettingsMenu();
-    Test.assertEqualMessage(menu.getItem(0).getLabel(), "Distanz",
+    Test.assertEqualMessage(menu.getItem(0).getLabel(), "Distance",
         "the first setting is not the race distance");
     Test.assertEqualMessage(menu.timeItem.getSubLabel(),
         RaceSetup.formatTime(RaceSetup.targetTimeSec()),
